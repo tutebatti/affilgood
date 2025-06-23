@@ -1,19 +1,17 @@
-import os
-import sys
-import boto3
 import gzip
 import json
-import requests
-import zipfile
-import pandas as pd
 import logging
-
+import sys
+import zipfile
+from datetime import datetime, timedelta
 from io import BytesIO
+
+import boto3
+import pandas as pd
+import requests
 from botocore import UNSIGNED
 from botocore.config import Config
-from datetime import datetime, timedelta
 from unidecode import unidecode
-from pathlib import Path
 
 from .constants import *
 from .plugins import DataSourceRegistry

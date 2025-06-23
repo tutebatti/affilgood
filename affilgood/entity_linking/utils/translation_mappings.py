@@ -1,6 +1,3 @@
-import os
-from unidecode import unidecode
-
 # Group translations by category for controlled multi-pass replacement
 INSTITUTION_TYPE_TRANSLATIONS = {
     'Universität': 'University',

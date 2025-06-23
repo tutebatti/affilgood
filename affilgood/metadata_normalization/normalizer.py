@@ -1,16 +1,15 @@
 # normalizer.py
-import os
 import csv
-import re
-from langdetect import detect
-import translators as ts
-import country_converter as coco
 import logging
+import os
+import re
 import time
-from geopy.geocoders import Nominatim
-from geopy.adapters import AioHTTPAdapter
-import requests
+
+import country_converter as coco
 import requests_cache
+import translators as ts
+from geopy.geocoders import Nominatim
+from langdetect import detect
 
 # Define the path to the cache file relative to this script
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))

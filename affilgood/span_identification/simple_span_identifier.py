@@ -1,8 +1,10 @@
 import re
 
+
 def clean_whitespaces(text):
     """Clean extra whitespace from text."""
     return re.sub(r'\s+', ' ', str(text).strip())
+
 
 class SimpleSpanIdentifier:
     """
@@ -11,7 +13,7 @@ class SimpleSpanIdentifier:
     
     Can optionally split text by a separator character to create multiple spans.
     """
-    
+
     def __init__(self, separator=";", **kwargs):
         """
         Initialize the SimpleSpanIdentifier.
@@ -23,7 +25,7 @@ class SimpleSpanIdentifier:
         - **kwargs: Additional parameters for compatibility with SpanIdentifier.
         """
         self.separator = separator
-        
+
     def identify_spans(self, text_list):
         """
         Process a list of text data for span identification.
@@ -37,10 +39,10 @@ class SimpleSpanIdentifier:
         # Handle single string input
         if isinstance(text_list, str):
             text_list = [text_list]
-            
+
         # Clean each text entry
         text_list = [clean_whitespaces(text) for text in text_list]
-            
+
         # Create results list
         results = []
         for raw_text in text_list:
@@ -53,11 +55,11 @@ class SimpleSpanIdentifier:
             else:
                 # Otherwise, treat the whole text as a single span
                 spans = [raw_text]
-                
+
             # Add the processed data for the current text to the results
             results.append({
                 "raw_text": raw_text,
                 "span_entities": spans
             })
-            
+
         return results

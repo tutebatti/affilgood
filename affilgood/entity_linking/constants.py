@@ -102,7 +102,7 @@ ENCODER_BASE_MODEL = "intfloat/multilingual-e5-large"
 
 # Fine-tuned model for computing similarity.
 ENCODER_MODEL_DIR = f'{EL_DATA_PATH}/contrastive/model'
-#ENCODER_DEFAULT_MODEL = f'{ENCODER_MODEL_DIR}/finetuned_with_iter1_thres60_5neg_more-labels_100percROR_special_tokens'
+# ENCODER_DEFAULT_MODEL = f'{ENCODER_MODEL_DIR}/finetuned_with_iter1_thres60_5neg_more-labels_100percROR_special_tokens'
 ENCODER_DEFAULT_MODEL = "SIRIS-Lab/affilgood-dense-retriever"
 
 # Cross-encoder model.
@@ -116,9 +116,9 @@ CROSS_ENCODER_DEFAULT_MODEL = f'{CROSS_ENCODER_MODEL_DIR}/cross_enc_e5_finetuned
 DIRECT_PAIR_RERANKER_BASE_MODEL = 'cross-encoder/mmarco-mMiniLMv2-L12-H384-v1'
 
 DIRECT_PAIR_RERANKER_MODEL_DIR = f'{EL_DATA_PATH}/direct_pair_reranker/model'
-#DIRECT_PAIR_RERANKER_DEFAULT_MODEL = f'{DIRECT_PAIR_RERANKER_MODEL_DIR}/model'
+# DIRECT_PAIR_RERANKER_DEFAULT_MODEL = f'{DIRECT_PAIR_RERANKER_MODEL_DIR}/model'
 
-DIRECT_PAIR_RERANKER_DEFAULT_MODEL="jinaai/jina-reranker-v2-base-multilingual"
+DIRECT_PAIR_RERANKER_DEFAULT_MODEL = "jinaai/jina-reranker-v2-base-multilingual"
 
 # Annoy configuration
 USE_ANNOY_BY_DEFAULT = False
@@ -130,9 +130,9 @@ WHOOSH_INDICES_PATH = f'{EL_PATH}/whoosh_indices'
 
 # HNSW configuration
 USE_HNSW_BY_DEFAULT = True
-HNSW_M = 16            # Number of connections per element (higher = better accuracy but more memory)
+HNSW_M = 16  # Number of connections per element (higher = better accuracy but more memory)
 HNSW_EF_CONSTRUCTION = 200  # Construction time/accuracy trade-off
-HNSW_EF_SEARCH = 50    # Search time/accuracy trade-off
+HNSW_EF_SEARCH = 50  # Search time/accuracy trade-off
 HNSW_INDICES_PATH = f'{EL_PATH}/hnsw_indices'
 
 # S2AFF.
@@ -155,6 +155,3 @@ CHUNK_SIZE_EL = 1000
 MAX_PARALLEL_EL = 20
 SAVE_CHUNKS_EL = True
 OUTPUT_PARTIAL_CHUNKS = 'output'
-
-
-

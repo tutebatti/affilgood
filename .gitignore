@@ -82,3 +82,4 @@ whoosh_indices
 hnsw_indices
 
 
+.venv

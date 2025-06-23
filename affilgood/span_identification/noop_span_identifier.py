@@ -1,8 +1,10 @@
 import re
 
+
 def clean_whitespaces(text):
     """Clean extra whitespace from text."""
     return re.sub(r'\s+', ' ', str(text).strip())
+
 
 class NoopSpanIdentifier:
     """
@@ -10,7 +12,7 @@ class NoopSpanIdentifier:
     Each input text is treated as a single span without any splitting or modification.
     Useful for pre-segmented data where each input is already a single span.
     """
-    
+
     def __init__(self, **kwargs):
         """
         Initialize the NoopSpanIdentifier.
@@ -19,7 +21,7 @@ class NoopSpanIdentifier:
         - **kwargs: Additional parameters for compatibility with other SpanIdentifier classes.
         """
         pass
-        
+
     def identify_spans(self, text_list):
         """
         Process a list of text data, treating each as a single span.
@@ -33,10 +35,10 @@ class NoopSpanIdentifier:
         # Handle single string input
         if isinstance(text_list, str):
             text_list = [text_list]
-            
+
         # Clean each text entry
         text_list = [clean_whitespaces(text) for text in text_list]
-            
+
         # Create results list - each text becomes exactly one span
         results = []
         for raw_text in text_list:
@@ -44,6 +46,5 @@ class NoopSpanIdentifier:
                 "raw_text": raw_text,
                 "span_entities": [raw_text]
             })
-            
-        return results
 
+        return results

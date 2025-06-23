@@ -1,15 +1,13 @@
-import os
-import torch
 import json
+# Configure the specific logger for this module
+import logging
 import re
-from typing import Dict, List, Optional, Tuple
+
+import torch
 from sentence_transformers import SentenceTransformer, util
 
 from .base_linker import BaseLinker
 from .constants import *
-
-# Configure the specific logger for this module
-import logging
 
 logger = logging.getLogger(__name__)
 if not logger.handlers:  # Only add handlers if none exist

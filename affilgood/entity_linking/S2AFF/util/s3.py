@@ -1,5 +1,6 @@
 import boto3
 
+
 def get_ror_version():
     s3 = boto3.client('s3')
     suffix = "-ror-data.json"

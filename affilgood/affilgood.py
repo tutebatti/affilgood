@@ -1,12 +1,10 @@
 import torch
 import time
-import re
-from typing import List, Dict, Union, Any, Optional
+
 
 DEFAULT_ENTITY_LINKERS = 'Dense'
 
 class AffilGood:
-
     def __init__(self, 
                  span_separator='',  
                  span_model_path=None, 

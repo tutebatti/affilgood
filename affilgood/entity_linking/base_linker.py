@@ -1,9 +1,9 @@
-import time
-import os
-import json
 import pickle
+import time
 from abc import ABC, abstractmethod
+
 from .constants import *
+
 
 class BaseLinker(ABC):
     """Base class for entity linkers with shared functionalities."""

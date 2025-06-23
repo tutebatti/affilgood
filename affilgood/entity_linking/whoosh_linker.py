@@ -1,18 +1,11 @@
-import os
 from whoosh import index
+from whoosh.analysis import StemmingAnalyzer
 from whoosh.qparser import MultifieldParser, QueryParser, OrGroup, AndGroup
 from whoosh.query import Term, Or, And, FuzzyTerm
-from whoosh.analysis import StemmingAnalyzer
+
 from .base_linker import BaseLinker
-from .utils.text_utils import (
-    get_variants_list, get_variants_country,
-    get_stopwords, get_legal_entities, load_abbreviations
-)
-from .utils.translation_mappings import translate_institution_name
-from unidecode import unidecode
-from .constants import *
-import math
 from .utils.text_utils import *
+from .utils.translation_mappings import translate_institution_name
 
 ADJUST_FACTOR_THRESHOLD_NON_LATIN = 0.75
 DEFAULT_CALIBRATION_POINTS = {
@@ -198,9 +191,7 @@ class WhooshLinker(BaseLinker):
                 "median": 0,
                 "count": 0
             }
-        
-        import numpy as np
-        
+
         return {
             "min": min(scores) if scores else 0,
             "max": max(scores) if scores else 0,

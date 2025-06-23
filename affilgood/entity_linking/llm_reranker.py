@@ -1,10 +1,11 @@
-import re
-import warnings
-import os
-import sys
 import io
 import logging
+import re
+import sys
+import warnings
+
 from transformers import pipeline, logging as transformers_logging
+
 from .base_reranker import BaseReranker
 
 TASK_DESCRIPTION_TEXT = """

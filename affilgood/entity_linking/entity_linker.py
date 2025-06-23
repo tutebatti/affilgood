@@ -1,14 +1,11 @@
-import os
-import re
 import sys
 import json
-import time
-import random
+import sys
 from concurrent.futures import ThreadPoolExecutor
+
 from .data_manager import DataManager
-from .constants import *
 from .utils.text_utils import *
-                
+
 # Make sure that S2AFF is in the path to avoid changing the code in S2AFF implementations.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), S2AFF_PATH)))
 

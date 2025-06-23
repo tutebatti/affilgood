@@ -1,18 +1,16 @@
-import os
-import sys
-import torch
-import json
-import re
-import time
-import pickle
-from typing import List, Dict, Tuple, Optional, Set, Any
-from tqdm import tqdm
-from sentence_transformers import CrossEncoder, util
 import contextlib
-from .constants import *
-
+import json
 # Configure the specific logger for this module
 import logging
+import pickle
+import re
+import sys
+import time
+from typing import List, Dict, Optional, Any
+
+from sentence_transformers import CrossEncoder
+
+from .constants import *
 
 logger = logging.getLogger(__name__)
 if not logger.handlers:  # Only add handlers if none exist

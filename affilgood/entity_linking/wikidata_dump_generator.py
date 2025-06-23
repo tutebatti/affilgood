@@ -1,18 +1,20 @@
-from typing import List, Dict, Optional, Union
-from SPARQLWrapper import SPARQLWrapper, JSON
-from SPARQLWrapper.SPARQLExceptions import EndPointInternalError
-from pathlib import Path
-from tqdm import tqdm
+import json
+import logging
+import os
+import pickle
+import sys
+import time
 from datetime import datetime, timedelta
+from pathlib import Path
+from typing import List, Optional, Union
+
 import pandas as pd
 import pycountry
 import requests_cache
-import json
-import logging
-import time
-import pickle
-import os
-import sys
+from SPARQLWrapper import SPARQLWrapper, JSON
+from SPARQLWrapper.SPARQLExceptions import EndPointInternalError
+from tqdm import tqdm
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from entity_linking.constants import WIKIDATA_ORG_TYPES_SHORT, WIKIDATA_ORG_TYPES_EXTENDED, COUNTRY_LANGS_FILE
 
@@ -26,9 +28,10 @@ if not logger.handlers:
     logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
+
 class WikiDataCache:
     """Cache for WikiData SPARQL query results."""
-    
+
     def __init__(self, cache_dir=None, cache_expiration_days=30):
         """
         Initialize the WikiData cache.
@@ -42,15 +45,15 @@ class WikiDataCache:
             if cache_dir is None:
                 home_dir = os.path.expanduser("~")
                 cache_dir = os.path.join(home_dir, ".wikidata_cache")
-            
+
             self.cache_dir = Path(cache_dir)
             self.cache_dir.mkdir(parents=True, exist_ok=True)
             self.cache_expiration = timedelta(days=cache_expiration_days)
-            
+
             # Create subdirectories for different query types
             self.count_cache_dir = self.cache_dir / "count_queries"
             self.batch_cache_dir = self.cache_dir / "batch_queries"
-            
+
             # Use try/except for each directory creation
             try:
                 self.count_cache_dir.mkdir(exist_ok=True)
@@ -58,19 +61,19 @@ class WikiDataCache:
                 # Fallback to string paths if pathlib has issues
                 self.count_cache_dir = os.path.join(cache_dir, "count_queries")
                 os.makedirs(self.count_cache_dir, exist_ok=True)
-                
+
             try:
                 self.batch_cache_dir.mkdir(exist_ok=True)
             except Exception:
                 # Fallback to string paths if pathlib has issues
                 self.batch_cache_dir = os.path.join(cache_dir, "batch_queries")
                 os.makedirs(self.batch_cache_dir, exist_ok=True)
-            
+
             # Cache statistics
             self.hits = 0
             self.misses = 0
             self.saved_queries = 0
-            
+
         except Exception as e:
             print(f"Error initializing WikiDataCache: {e}")
             # Fallback to memory-only operation
@@ -81,33 +84,33 @@ class WikiDataCache:
             self.hits = 0
             self.misses = 0
             self.saved_queries = 0
-    
+
     def get_count_cache_path(self, type_qid, country_qid):
         """Get cache file path for a count query."""
         if self.count_cache_dir is None:
             return None
-            
+
         cache_key = f"count_{type_qid}_{country_qid}"
-        
+
         # Handle both Path and string paths
         if isinstance(self.count_cache_dir, Path):
             return self.count_cache_dir / f"{cache_key}.json"
         else:
             return os.path.join(self.count_cache_dir, f"{cache_key}.json")
-    
+
     def get_batch_cache_path(self, type_qid, country_qid, limit, offset):
         """Get cache file path for a batch query."""
         if self.batch_cache_dir is None:
             return None
-            
+
         cache_key = f"batch_{type_qid}_{country_qid}_{limit}_{offset}"
-        
+
         # Handle both Path and string paths
         if isinstance(self.batch_cache_dir, Path):
             return self.batch_cache_dir / f"{cache_key}.pickle"
         else:
             return os.path.join(self.batch_cache_dir, f"{cache_key}.pickle")
-    
+
     def get_cached_count(self, type_qid, country_qid):
         """
         Get a cached count result if available and not expired.
@@ -121,26 +124,26 @@ class WikiDataCache:
         """
         try:
             cache_path = self.get_count_cache_path(type_qid, country_qid)
-            
+
             if cache_path is None or not os.path.exists(cache_path):
                 self.misses += 1
                 return None
-                
+
             try:
                 with open(cache_path, 'r') as f:
                     cached_data = json.load(f)
-                    
+
                 # Check if cache is expired
                 cache_time = datetime.fromisoformat(cached_data.get('timestamp', '2000-01-01'))
                 if datetime.now() - cache_time > self.cache_expiration:
                     # Cache expired
                     self.misses += 1
                     return None
-                    
+
                 # Valid cache
                 self.hits += 1
                 return cached_data.get('count')
-                
+
             except Exception:
                 # If any error occurs, treat as cache miss
                 self.misses += 1
@@ -149,7 +152,7 @@ class WikiDataCache:
             print(f"Error in get_cached_count: {e}")
             self.misses += 1
             return None
-    
+
     def cache_count(self, type_qid, country_qid, count):
         """
         Cache a count query result.
@@ -162,26 +165,26 @@ class WikiDataCache:
         try:
             if self.count_cache_dir is None:
                 return
-                
+
             cache_path = self.get_count_cache_path(type_qid, country_qid)
             if cache_path is None:
                 return
-                
+
             cache_data = {
                 'type_qid': type_qid,
                 'country_qid': country_qid,
                 'count': count,
                 'timestamp': datetime.now().isoformat()
             }
-            
+
             with open(cache_path, 'w') as f:
                 json.dump(cache_data, f)
-                
+
             self.saved_queries += 1
-            
+
         except Exception as e:
             print(f"Error caching count: {e}")
-    
+
     def get_cached_batch(self, type_qid, country_qid, limit, offset):
         """
         Get a cached batch result if available and not expired.
@@ -197,26 +200,26 @@ class WikiDataCache:
         """
         try:
             cache_path = self.get_batch_cache_path(type_qid, country_qid, limit, offset)
-            
+
             if cache_path is None or not os.path.exists(cache_path):
                 self.misses += 1
                 return None
-                
+
             try:
                 with open(cache_path, 'rb') as f:
                     cached_data = pickle.load(f)
-                    
+
                 # Check if cache is expired
                 cache_time = cached_data.get('timestamp')
                 if not cache_time or datetime.now() - cache_time > self.cache_expiration:
                     # Cache expired
                     self.misses += 1
                     return None
-                    
+
                 # Valid cache
                 self.hits += 1
                 return cached_data.get('results')
-                
+
             except Exception as e:
                 # If any error occurs, treat as cache miss
                 print(f"Error reading cache file {cache_path}: {e}")
@@ -226,7 +229,7 @@ class WikiDataCache:
             print(f"Error in get_cached_batch: {e}")
             self.misses += 1
             return None
-    
+
     def cache_batch(self, type_qid, country_qid, limit, offset, results):
         """
         Cache a batch query result.
@@ -241,11 +244,11 @@ class WikiDataCache:
         try:
             if self.batch_cache_dir is None:
                 return
-                
+
             cache_path = self.get_batch_cache_path(type_qid, country_qid, limit, offset)
             if cache_path is None:
                 return
-                
+
             cache_data = {
                 'type_qid': type_qid,
                 'country_qid': country_qid,
@@ -254,38 +257,38 @@ class WikiDataCache:
                 'results': results,
                 'timestamp': datetime.now()
             }
-            
+
             with open(cache_path, 'wb') as f:
                 pickle.dump(cache_data, f)
-                
+
             self.saved_queries += 1
-            
+
         except Exception as e:
             print(f"Error caching batch: {e}")
-            
+
     def clear_expired(self):
         """Clear expired cache entries to free up disk space."""
         if self.count_cache_dir is None or self.batch_cache_dir is None:
             return 0
-            
+
         cleared_count = 0
         now = datetime.now()
-        
+
         try:
             # Clear expired count caches
             try:
                 count_files = list(Path(self.count_cache_dir).glob("*.json"))
             except Exception:
                 # Fallback to os.listdir if pathlib has issues
-                count_files = [os.path.join(self.count_cache_dir, f) 
-                              for f in os.listdir(self.count_cache_dir) 
-                              if f.endswith('.json')]
-                
+                count_files = [os.path.join(self.count_cache_dir, f)
+                               for f in os.listdir(self.count_cache_dir)
+                               if f.endswith('.json')]
+
             for cache_file in count_files:
                 try:
                     with open(cache_file, 'r') as f:
                         cached_data = json.load(f)
-                        
+
                     cache_time = datetime.fromisoformat(cached_data.get('timestamp', '2000-01-01'))
                     if now - cache_time > self.cache_expiration:
                         os.remove(cache_file)
@@ -299,22 +302,22 @@ class WikiDataCache:
                         pass
         except Exception as e:
             print(f"Error clearing count cache: {e}")
-        
+
         try:
             # Clear expired batch caches
             try:
                 batch_files = list(Path(self.batch_cache_dir).glob("*.pickle"))
             except Exception:
                 # Fallback to os.listdir if pathlib has issues
-                batch_files = [os.path.join(self.batch_cache_dir, f) 
-                              for f in os.listdir(self.batch_cache_dir) 
-                              if f.endswith('.pickle')]
-                
+                batch_files = [os.path.join(self.batch_cache_dir, f)
+                               for f in os.listdir(self.batch_cache_dir)
+                               if f.endswith('.pickle')]
+
             for cache_file in batch_files:
                 try:
                     with open(cache_file, 'rb') as f:
                         cached_data = pickle.load(f)
-                        
+
                     cache_time = cached_data.get('timestamp')
                     if not cache_time or now - cache_time > self.cache_expiration:
                         os.remove(cache_file)
@@ -328,9 +331,9 @@ class WikiDataCache:
                         pass
         except Exception as e:
             print(f"Error clearing batch cache: {e}")
-        
+
         return cleared_count
-    
+
     def get_stats(self):
         """Get cache statistics."""
         if self.count_cache_dir is None or self.batch_cache_dir is None:
@@ -340,7 +343,7 @@ class WikiDataCache:
                 "saved_queries": self.saved_queries,
                 "status": "Memory-only mode (no disk cache)"
             }
-            
+
         try:
             # Count cache files
             try:
@@ -348,13 +351,13 @@ class WikiDataCache:
             except Exception:
                 # Fallback to os.listdir if pathlib has issues
                 count_files = len([f for f in os.listdir(self.count_cache_dir) if f.endswith('.json')])
-                
+
             try:
                 batch_files = len(list(Path(self.batch_cache_dir).glob("*.pickle")))
             except Exception:
                 # Fallback to os.listdir if pathlib has issues
                 batch_files = len([f for f in os.listdir(self.batch_cache_dir) if f.endswith('.pickle')])
-            
+
             # Estimate cache size
             total_size = 0
             try:
@@ -365,7 +368,7 @@ class WikiDataCache:
                         total_size += os.path.getsize(fp)
             except Exception as e:
                 print(f"Error calculating cache size: {e}")
-            
+
             return {
                 "hits": self.hits,
                 "misses": self.misses,
@@ -386,30 +389,31 @@ class WikiDataCache:
                 "error": str(e)
             }
 
+
 class WikidataDumpGenerator:
 
     def __init__(self, verbose=False):
         self.endpoint_url = WIKIDATA_SPARQL_ENDPOINT
         self.headers = {"User-Agent": "WikidataDumpGeneratorBot/1.0 (your-email@example.com)"}
-        
+
         # Initialize cache for WikiData queries
         self.cache = WikiDataCache()
-        
+
         # Keep requests_cache for backward compatibility, but we'll primarily use our custom cache
         self.session = requests_cache.CachedSession(
             cache_name='sparql_cache',
             backend='sqlite',
             expire_after=86400
         )
-        
+
         self.verbose = verbose
         if self.verbose:
             logger.info("Initializing WikidataDumpGenerator...")
-        
+
         # Load language codes for countries
         lang_codes_df = pd.read_csv(COUNTRY_LANGS_FILE, sep='\t').fillna("")
         self.lang_lookup = lang_codes_df.set_index('country_exonym')['lang_codes'].str.split('|').to_dict()
-        
+
         # Load organization types
         with open(WIKIDATA_ORG_TYPES_SHORT, 'r', encoding='utf-8') as f:
             qid_to_type = json.load(f)
@@ -418,15 +422,15 @@ class WikidataDumpGenerator:
         with open(WIKIDATA_ORG_TYPES_EXTENDED, 'r', encoding='utf-8') as f:
             qid_to_type_ext = json.load(f)
             self.organisation_types_extended = {v: k for k, v in qid_to_type_ext.items()}  # Name to QID
-            
+
         # Reverse mappings (QID to name)
         self.country_map = None
         self.org_type_map_short = qid_to_type
         self.org_type_map_extended = qid_to_type_ext
-        
+
         if self.verbose:
             logger.info("Initialization complete.")
-        
+
     def get_country_qids_from_wikidata(self):
         """
         Query Wikidata for countries and their QIDs.
@@ -436,10 +440,10 @@ class WikidataDumpGenerator:
         """
         if self.country_map is not None:
             return self.country_map
-            
+
         sparql = SPARQLWrapper(WIKIDATA_SPARQL_ENDPOINT)
         sparql._session = self.session
-        
+
         query = """
         SELECT ?country ?countryLabel WHERE {
         ?country wdt:P31 wd:Q6256.
@@ -449,10 +453,10 @@ class WikidataDumpGenerator:
         sparql.setQuery(query)
         sparql.setReturnFormat(JSON)
         results = sparql.query().convert()
-        
-        countries = {res["countryLabel"]["value"]: res["country"]["value"].split("/")[-1] 
-                    for res in results["results"]["bindings"]}
-        
+
+        countries = {res["countryLabel"]["value"]: res["country"]["value"].split("/")[-1]
+                     for res in results["results"]["bindings"]}
+
         # Cache the result
         self.country_map = countries
         return countries
@@ -470,35 +474,35 @@ class WikidataDumpGenerator:
         # If it's already a QID (starts with Q), return it
         if isinstance(country, str) and country.startswith('Q'):
             return country
-            
+
         # Get the map of country names to QIDs
         country_map = self.get_country_qids_from_wikidata()
-        
+
         # Try direct lookup
         if country in country_map:
             return country_map[country]
-            
+
         # Try case-insensitive lookup
         for name, qid in country_map.items():
             if name.lower() == country.lower():
                 return qid
-                
+
         # Try with pycountry
         try:
             country_obj = pycountry.countries.lookup(country)
             country_name = country_obj.name
-            
+
             # Try with the official name
             if country_name in country_map:
                 return country_map[country_name]
-                
+
             # Try with common name variations
             for name, qid in country_map.items():
                 if country_name.lower() in name.lower() or name.lower() in country_name.lower():
                     return qid
         except LookupError:
             pass
-            
+
         # Not found
         logger.warning(f"Could not resolve country: {country}")
         return None
@@ -516,31 +520,31 @@ class WikidataDumpGenerator:
         # If it's already a QID (starts with Q), return it
         if isinstance(org_type, str) and org_type.startswith('Q'):
             return org_type
-            
+
         # Try in short list
         if org_type in self.organisation_types_short:
             return self.organisation_types_short[org_type]
-            
+
         # Try in extended list
         if org_type in self.organisation_types_extended:
             return self.organisation_types_extended[org_type]
-            
+
         # Try case-insensitive lookup in short list
         for name, qid in self.organisation_types_short.items():
             if name.lower() == org_type.lower():
                 return qid
-                
+
         # Try case-insensitive lookup in extended list
         for name, qid in self.organisation_types_extended.items():
             if name.lower() == org_type.lower():
                 return qid
-                
+
         # Try reverse lookup in case a QID value was passed as name
         if org_type in self.org_type_map_short:
             return org_type
         if org_type in self.org_type_map_extended:
             return org_type
-            
+
         # Not found
         logger.warning(f"Could not resolve organization type: {org_type}")
         return None
@@ -559,21 +563,21 @@ class WikidataDumpGenerator:
         """
         if self.verbose:
             logger.info(f"fetch_results: Fetching data for type {type_qid} in country {country_qid}...")
-        
+
         # Results will be collected here
         all_results = []
-        
+
         # Batch processing parameters
         batch_size = 100  # Smaller batches are less likely to time out
         offset = 0
         max_batches = 20  # Limit total number of batches to prevent excessive queries
-        
+
         # Skip count query if it's taking too long or causing issues
         # Just start with batch retrieval directly
         try:
             # Try to get from cache first with very short timeout
             total_count = self.cache.get_cached_count(type_qid, country_qid)
-            
+
             if total_count is not None:
                 if self.verbose:
                     logger.info(f"Using cached count: {total_count} organizations")
@@ -585,45 +589,46 @@ class WikidataDumpGenerator:
                         wdt:P17 wd:{country_qid}.
                 }}
                 """
-                
+
                 # Set SPARQL endpoint for count query with strict timeout
                 sparql = SPARQLWrapper(WIKIDATA_SPARQL_ENDPOINT)
                 sparql.setTimeout(10)  # Very short timeout for count query
                 sparql.setQuery(count_query)
                 sparql.setReturnFormat(JSON)
-                
+
                 try:
                     # Use a threading approach with timeout to avoid hanging
                     import threading
                     import queue
-                    
+
                     result_queue = queue.Queue()
-                    
+
                     def execute_query():
                         try:
                             count_results = sparql.query().convert()
                             result_queue.put(int(count_results['results']['bindings'][0]['count']['value']))
                         except Exception as e:
                             result_queue.put(None)
-                    
+
                     # Start query in a thread
                     query_thread = threading.Thread(target=execute_query)
                     query_thread.daemon = True
                     query_thread.start()
-                    
+
                     # Wait for result with timeout
                     try:
                         total_count = result_queue.get(timeout=15)  # 15 second timeout
                         if total_count is not None:
                             # Cache the count
                             self.cache.cache_count(type_qid, country_qid, total_count)
-                            
+
                             if self.verbose:
                                 logger.info(f"Found {total_count} organizations to fetch")
-                            
+
                             # If small enough, fetch in one go to avoid multiple queries
                             if total_count <= batch_size:
-                                batch_results = self._fetch_batch_with_retry(type_qid, country_qid, limit=total_count, offset=0)
+                                batch_results = self._fetch_batch_with_retry(type_qid, country_qid, limit=total_count,
+                                                                             offset=0)
                                 return batch_results if batch_results else []
                     except queue.Empty:
                         if self.verbose:
@@ -635,10 +640,10 @@ class WikidataDumpGenerator:
             # If anything goes wrong with count, just proceed with batching
             if self.verbose:
                 logger.warning(f"Count query exception: {e}. Proceeding without count information.")
-        
+
         # Process in batches with timeouts to avoid hanging
         batch_num = 1
-        
+
         while batch_num <= max_batches:
             try:
                 # Check if batch is in cache first
@@ -648,7 +653,7 @@ class WikidataDumpGenerator:
                 except Exception as cache_error:
                     if self.verbose:
                         logger.warning(f"Cache error: {cache_error}. Proceeding without cache.")
-                
+
                 if cached_batch is not None:
                     if self.verbose:
                         logger.info(f"Using cached batch at offset {offset}")
@@ -659,21 +664,22 @@ class WikidataDumpGenerator:
                         # Use a threading approach with timeout to avoid hanging
                         import threading
                         import queue
-                        
+
                         result_queue = queue.Queue()
-                        
+
                         def execute_batch_fetch():
                             try:
-                                results = self._fetch_batch_with_retry(type_qid, country_qid, limit=batch_size, offset=offset)
+                                results = self._fetch_batch_with_retry(type_qid, country_qid, limit=batch_size,
+                                                                       offset=offset)
                                 result_queue.put(results)
                             except Exception as e:
                                 result_queue.put([])
-                        
+
                         # Start query in a thread
                         query_thread = threading.Thread(target=execute_batch_fetch)
                         query_thread.daemon = True
                         query_thread.start()
-                        
+
                         # Wait for result with timeout
                         try:
                             batch_results = result_queue.get(timeout=60)  # 60 second timeout for batch
@@ -685,7 +691,7 @@ class WikidataDumpGenerator:
                         if self.verbose:
                             logger.error(f"Error during batch retrieval: {batch_error}")
                         batch_results = []
-                    
+
                     # Cache the batch result if successful
                     if batch_results:
                         try:
@@ -693,50 +699,50 @@ class WikidataDumpGenerator:
                         except Exception as cache_error:
                             if self.verbose:
                                 logger.warning(f"Error caching batch: {cache_error}")
-                
+
                 # If no results returned, we've reached the end
                 if not batch_results:
                     if self.verbose:
                         logger.info(f"No more results at offset {offset}. Completed retrieval.")
                     break
-                    
+
                 # Add batch results to total results
                 all_results.extend(batch_results)
-                
+
                 if self.verbose:
                     logger.info(f"Batch {batch_num}: Retrieved {len(batch_results)} organizations (offset {offset})")
-                
+
                 # Update offset for next batch
                 offset += len(batch_results)  # Use actual count rather than batch_size
                 batch_num += 1
-                
+
                 # If we know the total and have fetched all items, stop
                 if total_count is not None and len(all_results) >= total_count:
                     if self.verbose:
                         logger.info(f"Retrieved all {len(all_results)} organizations. Completed retrieval.")
                     break
-                    
+
                 # Optional delay between batches to reduce load on server
                 time.sleep(1)
-                
+
             except Exception as e:
                 # Unexpected error in batch processing
                 logger.error(f"Unexpected error in batch processing: {e}")
-                
+
                 # Try to continue with next batch
                 offset += batch_size
                 batch_num += 1
-        
+
         if self.verbose:
             logger.info(f"Total organizations fetched: {len(all_results)}")
-            
+
             # Show cache statistics
             try:
                 cache_stats = self.cache.get_stats()
                 logger.info(f"Cache statistics: {cache_stats['hits']} hits, {cache_stats['misses']} misses")
             except Exception as stats_error:
                 logger.warning(f"Error getting cache stats: {stats_error}")
-            
+
         return all_results
 
     def _fetch_batch_with_retry(self, type_qid, country_qid, limit=100, offset=0, max_retries=2):
@@ -756,30 +762,30 @@ class WikidataDumpGenerator:
         retry_count = 0
         current_limit = limit
         delay_base = 3  # Base delay in seconds
-        
+
         while retry_count <= max_retries:
             try:
                 # Fetch batch
                 batch_results = self._fetch_batch(type_qid, country_qid, limit=current_limit, offset=offset)
                 return batch_results
-                
+
             except EndPointInternalError as e:
                 if "TimeoutException" in str(e):
                     # For timeouts, reduce batch size and retry
                     retry_count += 1
-                    
+
                     if retry_count <= max_retries:
                         # Reduce batch size for retry
                         current_limit = max(10, current_limit // 2)
-                        
+
                         # Calculate exponential backoff delay
                         delay = delay_base * (2 ** (retry_count - 1))
-                        
+
                         if self.verbose:
                             logger.warning(f"Batch timed out at offset {offset}. "
-                                          f"Retry {retry_count}/{max_retries} with reduced batch size {current_limit} "
-                                          f"after {delay}s delay")
-                        
+                                           f"Retry {retry_count}/{max_retries} with reduced batch size {current_limit} "
+                                           f"after {delay}s delay")
+
                         # Wait before retry
                         time.sleep(delay)
                     else:
@@ -790,14 +796,14 @@ class WikidataDumpGenerator:
                 else:
                     # Other endpoint errors - log and retry with same parameters
                     retry_count += 1
-                    
+
                     if retry_count <= max_retries:
                         delay = delay_base * (2 ** (retry_count - 1))
-                        
+
                         if self.verbose:
                             logger.warning(f"Endpoint error at offset {offset}. "
-                                         f"Retry {retry_count}/{max_retries} after {delay}s delay: {e}")
-                        
+                                           f"Retry {retry_count}/{max_retries} after {delay}s delay: {e}")
+
                         # Wait before retry
                         time.sleep(delay)
                     else:
@@ -805,18 +811,18 @@ class WikidataDumpGenerator:
                         if self.verbose:
                             logger.error(f"Batch at offset {offset} failed after {max_retries} retries: {e}")
                         return []
-                        
+
             except Exception as e:
                 # Handle other exceptions
                 retry_count += 1
-                
+
                 if retry_count <= max_retries:
                     delay = delay_base * (2 ** (retry_count - 1))
-                    
+
                     if self.verbose:
                         logger.warning(f"Error fetching batch at offset {offset}. "
-                                     f"Retry {retry_count}/{max_retries} after {delay}s delay: {e}")
-                    
+                                       f"Retry {retry_count}/{max_retries} after {delay}s delay: {e}")
+
                     # Wait before retry
                     time.sleep(delay)
                 else:
@@ -824,7 +830,7 @@ class WikidataDumpGenerator:
                     if self.verbose:
                         logger.error(f"Batch at offset {offset} failed after {max_retries} retries: {e}")
                     return []
-                    
+
         # Should never reach here, but just in case
         return []
 
@@ -843,13 +849,13 @@ class WikidataDumpGenerator:
         """
         # Set SPARQL endpoint
         sparql = SPARQLWrapper(WIKIDATA_SPARQL_ENDPOINT)
-        
+
         # Set cache session
         sparql._session = self.session
-        
+
         # Set timeout
         sparql.setTimeout(30)  # 30 seconds timeout
-        
+
         # Create query with LIMIT and OFFSET
         query = f"""
         SELECT ?id ?name_en 
@@ -937,12 +943,12 @@ class WikidataDumpGenerator:
 
         sparql.setQuery(query)
         sparql.setReturnFormat(JSON)
-        
+
         results = sparql.query().convert()
-        
+
         # Extract bindings
         rows = results['results']['bindings']
-        
+
         # Convert to flat list of dicts
         flattened_rows = []
         for row in rows:
@@ -950,10 +956,9 @@ class WikidataDumpGenerator:
             for key, value in row.items():
                 flat_row[key] = value.get('value', None)
             flattened_rows.append(flat_row)
-        
+
         return flattened_rows
 
-        
     def expand_organization_locations(self, row):
         # Convert external_ids to a simple dict if it's not already
         external_ids = {} if pd.isna(row.get('external_ids')) else row.get('external_ids')
@@ -1007,8 +1012,8 @@ class WikidataDumpGenerator:
 
         # 2. Headquarters (if different)
         if (
-            pd.notna(hq_city) and pd.notna(hq_country_name) and
-            (hq_city != city or hq_country_name != country_name)
+                pd.notna(hq_city) and pd.notna(hq_country_name) and
+                (hq_city != city or hq_country_name != country_name)
         ):
             entry = base_data.copy()
             entry.update({
@@ -1048,7 +1053,6 @@ class WikidataDumpGenerator:
 
         return entries
 
-
     # Step 2: Define helper to parse LANG:label format into a dict
     def parse_lang_values(self, value_str):
         if pd.isna(value_str):
@@ -1059,7 +1063,7 @@ class WikidataDumpGenerator:
     # Step 3: Main processing
     def process_lang_name_variants(self, row):
         lang_codes = self.lang_lookup.get(row['country_name'], ['en'])
-        
+
         # Parse all_names and aliases into dicts
         names_dict = self.parse_lang_values(row.get('all_names', ''))
         aliases_dict = self.parse_lang_values(row.get('aliases', ''))
@@ -1067,7 +1071,7 @@ class WikidataDumpGenerator:
         # Keep only official langs + English
         filtered_names = {k: v for k, v in names_dict.items() if k in lang_codes or k == 'en'}
         filtered_aliases = {k: v for k, v in aliases_dict.items() if k in lang_codes or k == 'en'}
-        
+
         # Determine main name: prefer first match in lang_codes, fallback to English, else use current name_en
         name = None
         for lang in lang_codes:
@@ -1082,7 +1086,7 @@ class WikidataDumpGenerator:
             'all_names': filtered_names,
             'aliases': filtered_aliases
         })
-    
+
     def country_flag_emoji_from_name(self, name: str) -> str:
         """
         Returns the emoji flag for a given country name.
@@ -1093,9 +1097,9 @@ class WikidataDumpGenerator:
             return ''.join(chr(127397 + ord(char)) for char in alpha_2)
         except LookupError:
             return ''
-    
-    def get_index(self, countries: Optional[Union[List[str], str]] = None, 
-                 org_types: Optional[Union[List[str], str]] = None):
+
+    def get_index(self, countries: Optional[Union[List[str], str]] = None,
+                  org_types: Optional[Union[List[str], str]] = None):
         """
         Get organization data from Wikidata.
         
@@ -1167,55 +1171,58 @@ class WikidataDumpGenerator:
             for country_qid in country_qids:
                 country_name = qid_to_country_name.get(country_qid, "Unknown")
                 flag = self.country_flag_emoji_from_name(country_name)
-                
+
                 for org_type_qid in org_type_qids:
                     try:
                         # Get organization type name for logging
-                        org_type_name = self.org_type_map_short.get(org_type_qid) or self.org_type_map_extended.get(org_type_qid) or org_type_qid
-                        
+                        org_type_name = self.org_type_map_short.get(org_type_qid) or self.org_type_map_extended.get(
+                            org_type_qid) or org_type_qid
+
                         # Create a descriptive progress message
                         progress_msg = f"Processing {flag} {country_name} - {org_type_name}"
-                        
+
                         if self.verbose:
-                            logger.info(f"Fetching data for type {org_type_name} ({org_type_qid}) in country {country_name} ({country_qid})...")
-                        
+                            logger.info(
+                                f"Fetching data for type {org_type_name} ({org_type_qid}) in country {country_name} ({country_qid})...")
+
                         # Update the master progress bar description
                         master_pbar.set_description(progress_msg)
-                        
+
                         # Fetch results for this country-org type combination
                         res = self.fetch_results(org_type_qid, country_qid)
-                        
+
                         if self.verbose:
                             logger.info(f"Retrieved {len(res)} results for {country_name}/{org_type_name}")
-                        
+
                         # Process results if we have any
                         if res:
                             df = pd.DataFrame(res)
-                            
+
                             if not df.empty:
                                 # Simplify the workflow
                                 df_clean = df.drop(columns=['crunchbase', 'ror', 'grid', 'lei'], errors='ignore')
                                 df_clean['external_ids'] = df.apply(
-                                    lambda row: {k: row[k] for k in ['crunchbase', 'ror', 'grid', 'lei'] 
-                                                if k in row and pd.notna(row[k])}, 
+                                    lambda row: {k: row[k] for k in ['crunchbase', 'ror', 'grid', 'lei']
+                                                 if k in row and pd.notna(row[k])},
                                     axis=1
                                 )
-                                
+
                                 for _, row in df_clean.iterrows():
                                     all_rows.extend(self.expand_organization_locations(row))
-                                
+
                                 # Save partial results to disk
                                 try:
                                     expanded_df = pd.DataFrame(all_rows)
-                                    expanded_df.to_parquet(temp_dir / f"{org_type_qid}_{country_qid}.parquet", index=False)
+                                    expanded_df.to_parquet(temp_dir / f"{org_type_qid}_{country_qid}.parquet",
+                                                           index=False)
                                 except Exception as save_error:
                                     logger.error(f"Error saving partial results: {save_error}")
-                        
+
                     except Exception as e:
                         logger.error(f"Error processing {org_type_qid}, {country_qid}: {e}")
                         import traceback
                         traceback.print_exc()
-                    
+
                     # Update the master progress bar
                     master_pbar.update(1)
 
@@ -1226,13 +1233,13 @@ class WikidataDumpGenerator:
         # Final processing
         try:
             expanded_df = pd.DataFrame(all_rows)
-            
+
             # Apply language processing
             expanded_df[['name', 'all_names', 'aliases']] = expanded_df.apply(self.process_lang_name_variants, axis=1)
 
             # Filter and deduplicate
             expanded_df = expanded_df[expanded_df.name.notnull()] \
-                                  .drop_duplicates(['id', 'name', 'city', 'country_name'], keep='first')
+                .drop_duplicates(['id', 'name', 'city', 'country_name'], keep='first')
 
             # Filter by countries in language lookup
             valid_countries = expanded_df.country_name.isin(self.lang_lookup.keys())

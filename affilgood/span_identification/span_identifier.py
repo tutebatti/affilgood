@@ -1,12 +1,7 @@
-import sys
-import os
-import json
-import pandas as pd
-from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
-from datasets import Dataset
 import re
+
 import torch
-from typing import List, Dict, Union, Any
+from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
 
 # DEFAULT MODEL
 DEFAULT_SPAN_MODEL = 'nicolauduran45/affilgood-span-v2'
