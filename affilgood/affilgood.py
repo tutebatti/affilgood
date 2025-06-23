@@ -4,6 +4,7 @@ import time
 
 DEFAULT_ENTITY_LINKERS = 'Dense'
 
+
 class AffilGood:
     def __init__(self, 
                  span_separator='',  
@@ -27,32 +28,33 @@ class AffilGood:
                  device=None,
                  batch_size=32,
                  data_sources="ror",  # ["ror", "wikidata", "plugin_source"]
-                 use_wikidata_labels_with_ror=False, # Whether to entich ROR indices with previously downloaded WikiData labels for ROR records
+                 # Whether to entich ROR indices with previously downloaded WikiData labels for ROR records
+                 use_wikidata_labels_with_ror=False,
                  wikidata_org_types='short',  # Organization types for WikiData
                  wikidata_countries=None,     # Countries for WikiData
                  data_source_configs=None):   # Dictionary of configuration for additional sources
 
         # Verbose?
         self.verbose = verbose
-        
+
         # Rerank?
         self.rerank = rerank
-        
+
         # Set reranker for combined results if provided
         self.reranker = reranker
-        
+
         # Data sources to use for entity linking
         self.data_sources = data_sources if isinstance(data_sources, list) else [data_sources]
-        
+
         # Data source configurations
         self.data_source_configs = data_source_configs or {}
-        
+
         self.use_wikidata_labels_with_ror = use_wikidata_labels_with_ror
-        
+
         # For backward compatibility, store WikiData parameters directly
         self.wikidata_org_types = wikidata_org_types
         self.wikidata_countries = wikidata_countries
-        
+
         # Add WikiData configuration if not already present
         if "wikidata" in self.data_sources and "wikidata" not in self.data_source_configs:
             self.data_source_configs["wikidata"] = {
@@ -60,16 +62,16 @@ class AffilGood:
                 "countries": wikidata_countries,
                 "verbose": verbose
             }
-        
+
         if self.verbose:
             print(f"Using data sources: {self.data_sources}")
             for source in self.data_sources:
                 if source in self.data_source_configs:
                     print(f"  {source} configuration: {self.data_source_configs[source]}")
-        
+
         # Initialize data source handlers if available
+        from affilgood.entity_linking.plugins import DataSourceRegistry
         try:
-            from affilgood.entity_linking.plugins import DataSourceRegistry
             for source in self.data_sources:
                 handler = DataSourceRegistry.get_handler(source)
                 if handler and hasattr(handler, 'initialize'):
@@ -80,14 +82,14 @@ class AffilGood:
             # Plugin system not available
             if self.verbose:
                 print("Plugin system not available - using only built-in data sources")
-        
+
         # Batch size
         self.batch_size = batch_size
-        
+
         # Auto-detect device if not specified
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
-        
+
         # Initialize language preprocessor if enabled
         if language_preprocessing:
             from affilgood.preprocessing.llm_translator import LLMTranslator
@@ -102,9 +104,9 @@ class AffilGood:
             self.language_preprocessor = None
             if self.verbose:
                 print(f'Language preprocessing is disabled')
-        
+
         # Initialize span identifier           
-        if span_separator and type(span_separator)==str and len(span_separator)==1:
+        if span_separator and type(span_separator) is str and len(span_separator) == 1:
             if self.verbose:
                 print(f'Initializing simple span separator by character: {span_separator}')
             from affilgood.span_identification.simple_span_identifier import SimpleSpanIdentifier
@@ -119,10 +121,10 @@ class AffilGood:
                 from affilgood.span_identification.span_identifier import SpanIdentifier
                 if self.verbose:
                     print(f'Initializing span identifier')
-                self.span_identifier = SpanIdentifier(model_path=span_model_path, device=device, batch_size=batch_size)
+                self.span_identifier = SpanIdentifier(span_model=span_model_path, device=device, batch_size=batch_size)
                 if self.verbose:
-                    print(f'Initialized span identifier: {self.span_identifier.model_path}')
-        
+                    print(f'Initialized span identifier: {self.span_identifier.span_model}')
+
         # Initialize NER model
         from affilgood.ner.ner import NER
         if self.verbose:
@@ -130,36 +132,36 @@ class AffilGood:
         self.ner = NER(model_path=ner_model_path, device=device, batch_size=batch_size)
         if self.verbose:
             print(f'Initialized NER: {self.ner.model_path}')
-        
+
         # Initialize entity linker with the provided linkers and data sources
         from affilgood.entity_linking.entity_linker import EntityLinker
         entity_linkers = entity_linkers if entity_linkers else DEFAULT_ENTITY_LINKERS
         # Handle the case where entity_linkers is a single string or object.
-        if type(entity_linkers) != list:
+        if type(entity_linkers) is not list:
             entity_linkers = [entity_linkers]
         if self.verbose:
             print(f'Initializing entity linkers: {entity_linkers} for data sources: {self.data_sources}')
         self.entity_linker = EntityLinker(
-                                linkers=entity_linkers,
-                                rerank=self.rerank,
-                                reranker=self.reranker,
-                                detailed_results=detailed_entity_linking_results,
-                                linker_threshold=initial_threshold_entity_linking,
-                                final_threshold=final_threshold_entity_linking,
-                                verbose=self.verbose,
-                                use_cache=use_entity_linking_cache,
-                                return_scores=return_scores,
-                                batch_size=batch_size,
-                                data_sources=self.data_sources,
-                                use_wikidata_labels_with_ror=self.use_wikidata_labels_with_ror,
-                                wikidata_org_types=self.wikidata_org_types,
-                                wikidata_countries=self.wikidata_countries,
-                                data_source_configs=self.data_source_configs)
-        
+            linkers=entity_linkers,
+            rerank=self.rerank,
+            reranker=self.reranker,
+            detailed_results=detailed_entity_linking_results,
+            linker_threshold=initial_threshold_entity_linking,
+            final_threshold=final_threshold_entity_linking,
+            verbose=self.verbose,
+            use_cache=use_entity_linking_cache,
+            return_scores=return_scores,
+            batch_size=batch_size,
+            data_sources=self.data_sources,
+            use_wikidata_labels_with_ror=self.use_wikidata_labels_with_ror,
+            wikidata_org_types=self.wikidata_org_types,
+            wikidata_countries=self.wikidata_countries,
+            data_source_configs=self.data_source_configs)
+
         # Initialize normalizer
         from affilgood.metadata_normalization.normalizer import GeoNormalizer
         normalizer = GeoNormalizer(
-            use_country_cache=use_country_cache, 
+            use_country_cache=use_country_cache,
             use_osm_cache=use_osm_cache
         ) if metadata_normalization else None
         if normalizer:
@@ -216,20 +218,21 @@ class AffilGood:
         # 2. Span identification - process all texts in one batch
         if self.verbose:
             print(f"Identifying spans for {len(processed_texts)} texts...")
-        
-        spans = self.span_identifier.identify_spans(processed_texts, batch_size=batch_size)
+
+        self.span_identifier.set_text_input(processed_texts)
+        self.span_identifier.identify_spans(batch_size=batch_size)
         
         if self.verbose and start_time:
             elapsed = time.time() - start_time
             print(f"Span identification completed in {elapsed:.2f}s")
-            print(f"Identified {sum(len(item['span_entities']) for item in spans)} spans")
+            print(f"Identified {sum(len(span.named_entities) for span in self.span_identifier.spans)} spans")
             start_time = time.time()
         
         # 3. Named Entity Recognition - process all spans in one batch
         if self.verbose:
             print(f"Recognizing entities...")
         
-        entities = self.ner.recognize_entities(spans, batch_size=batch_size)
+        entities = self.ner.recognize_entities(self.span_identifier.spans, batch_size=batch_size)
         
         if self.verbose and start_time:
             elapsed = time.time() - start_time
@@ -277,7 +280,7 @@ class AffilGood:
         results = self.entity_linker.process_in_chunks(entities)
         # Process the internal structure to ensure the linked_organizations field is properly populated
         for item in results:
-            if 'ror' in item and not 'linked_orgs' in item:
+            if 'ror' in item and 'linked_orgs' not in item:
                 # Build the linked_orgs structure if not already present
                 # This might happen if there was caching or other shortcuts in the pipeline
                 item['linked_orgs'] = []

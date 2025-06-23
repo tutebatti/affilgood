@@ -1,12 +1,8 @@
-import re
+from affilgood.span_identification.model import Span
+from affilgood.span_identification.span_identifier_interface import SpanIdentifierInterface
 
 
-def clean_whitespaces(text):
-    """Clean extra whitespace from text."""
-    return re.sub(r'\s+', ' ', str(text).strip())
-
-
-class SimpleSpanIdentifier:
+class SimpleSpanIdentifier(SpanIdentifierInterface):
     """
     A simple implementation of span identification that treats each input text
     as a complete span without complex processing.
@@ -14,52 +10,22 @@ class SimpleSpanIdentifier:
     Can optionally split text by a separator character to create multiple spans.
     """
 
-    def __init__(self, separator=";", **kwargs):
-        """
-        Initialize the SimpleSpanIdentifier.
-        
-        Parameters:
-        - separator (str, optional): Character to split text on. If provided,
-          each substring will become a separate span. If None, the entire text
-          is treated as a single span.
-        - **kwargs: Additional parameters for compatibility with SpanIdentifier.
-        """
+    def __init__(self, separator: str = ";", **kwargs):
+        super().__init__(**kwargs)
         self.separator = separator
 
-    def identify_spans(self, text_list):
-        """
-        Process a list of text data for span identification.
-        
-        Parameters:
-        - text_list (list or str): List of strings or a single string containing text data.
-        
-        Returns:
-        - List of dicts: Each dict contains the original text and identified spans.
-        """
-        # Handle single string input
-        if isinstance(text_list, str):
-            text_list = [text_list]
+    def identify_spans(self) -> None:
+        self.spans = []
 
-        # Clean each text entry
-        text_list = [clean_whitespaces(text) for text in text_list]
+        for raw_text in self.raw_text_list:
+            spans = _mk_spans(raw_text=raw_text, separator=self.separator)
+            self.spans.append(Span(raw_text=raw_text, named_entities=spans))
 
-        # Create results list
-        results = []
-        for raw_text in text_list:
-            # If separator is provided, split the text by it
-            if self.separator is not None:
-                spans = [span.strip() for span in raw_text.split(self.separator) if span.strip()]
-                # If splitting results in no valid spans, use the original text
-                if not spans:
-                    spans = [raw_text]
-            else:
-                # Otherwise, treat the whole text as a single span
-                spans = [raw_text]
 
-            # Add the processed data for the current text to the results
-            results.append({
-                "raw_text": raw_text,
-                "span_entities": spans
-            })
+def _mk_spans(raw_text: str, separator: str = ";") -> list[str]:
+    if separator is None:
+        return [raw_text]
 
-        return results
+    separated_raw_text = raw_text.split(separator)
+    spans = [span.strip() for span in separated_raw_text if span.strip()]
+    return spans or [raw_text]
