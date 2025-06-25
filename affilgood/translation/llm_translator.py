@@ -1,23 +1,23 @@
-import warnings
 import io
 import logging
 import os
 import sys
 import time
 import warnings
-from typing import Dict, Any, List, Union
+from enum import StrEnum
+from pathlib import Path
+from typing import Any
 
 import requests
-# Import requests_cache for HTTP caching
 import requests_cache
 from datasets import Dataset
 from transformers import pipeline, logging as transformers_logging
 
-from .language_detector import get_language_heur
+from affilgood.language_prediction.heuristic_prediction import predict_lang_heuristically
 
-#DEFAULT_MODEL = "TheBloke/neural-chat-7B-v3-2-GPTQ"
-DEFAULT_MODEL = "google/gemma-3-27b-it"
-DEFAULT_EXTERNAL_MODEL = "google/gemma-2-27b-it"
+DEFAULT_MODEL_LOCAL = "google/gemma-3-27b-it"
+# DEFAULT_MODEL = "TheBloke/neural-chat-7B-v3-2-GPTQ"
+DEFAULT_MODEL_EXTERNAL = "google/gemma-2-27b-it"
 
 DISABLE_HF_OUTPUT = False
 HF_TOKEN = ""
@@ -39,12 +39,19 @@ REQUESTS_CACHE_PATH = os.path.join(CURRENT_DIR, 'translation_http_cache')
 CACHE_EXPIRATION = 604800  # 7 days in seconds
 
 
-def get_model_specific_config(model_name: str) -> dict:
+class TranslationModel(StrEnum):
+    LLAMA = "llama"
+    GEMMA = "gemma"
+    MISTRAL = "mistral"
+    CLAUDE = "claude"
+
+
+def _get_model_specific_config(translation_model: TranslationModel) -> dict:
     """
     Get model-specific configuration parameters.
     
     Args:
-        model_name: Name/identifier of the model
+        translation_model: Name/identifier of the model
         
     Returns:
         Dictionary with model-specific parameters
@@ -59,22 +66,22 @@ def get_model_specific_config(model_name: str) -> dict:
     }
 
     # Model-specific adjustments
-    if 'llama' in model_name.lower():
+    if 'llama' in translation_model.lower():
         return {
             **base_config,
             'stop': ["<|eot_id|>", "<|eom_id|>"]
         }
-    elif 'gemma' in model_name.lower():
+    elif 'gemma' in translation_model.lower():
         return {
             **base_config,
             'stop': ["<eos>", "<end_of_turn>"]
         }
-    elif 'mistral' in model_name.lower() or 'mixtral' in model_name.lower():
+    elif 'mistral' in translation_model.lower() or 'mixtral' in translation_model.lower():
         return {
             **base_config,
             'stop': ["</s>"]
         }
-    elif 'claude' in model_name.lower():
+    elif 'claude' in translation_model.lower():
         return {
             **base_config,
             'stop': ["Human:", "H:"]
@@ -117,18 +124,30 @@ Text to translate:
 class LLMTranslator:
     """Translates affiliation strings from any language to English using an LLM."""
 
-    def __init__(self, skip_english=True, model_name=None, use_external_api=USE_EXTERNAL_API,
-                 api_url=EXTERNAL_API_URL, api_key=EXTERNAL_API_KEY, verbose=False,
-                 use_cache=True, cache_expire_after=CACHE_EXPIRATION, cache_path=None):
+    def __init__(
+            self,
+            skip_english: bool = True,
+
+            translation_model: TranslationModel = None,
+            translation_prompt: str = TRANSLATION_PROMPT_LOCAL,
+
+            use_external_api: bool = USE_EXTERNAL_API,
+            api_url: str = EXTERNAL_API_URL,
+            api_key: str = EXTERNAL_API_KEY,
+            verbose: bool = False,
+            use_cache: bool = True,
+            cache_expire_after: int = CACHE_EXPIRATION,
+            cache_path: str | Path = REQUESTS_CACHE_PATH
+    ) -> None:
         """
         Initialize the LLM translator.
         
         Args:
             skip_english: Whether to skip translation for English text
-            model_name: Name of the Hugging Face model to use
+            translation_model: Name of the Hugging Face model to use
             use_external_api: Whether to use an external API instead of local model
-            api_url: URL for the external API (if use_external_api is True)
-            api_key: API key for the external API (if use_external_api is True)
+            api_url: URL for the external API (if `use_external_api` is True)
+            api_key: API key for the external API (if `use_external_api` is True)
             verbose: Whether to show detailed loading information
             use_cache: Whether to use HTTP request caching
             cache_expire_after: Cache expiration time in seconds
@@ -136,16 +155,18 @@ class LLMTranslator:
         """
         self.verbose = verbose
         self.skip_english = skip_english
-
         self.use_external_api = use_external_api
 
         # Select appropriate model name
-        if model_name:
-            self.model_name = model_name
+        if translation_model:
+            self.translation_model = translation_model
+            self.translation_prompt = translation_prompt
+        elif use_external_api:
+            self.translation_model = DEFAULT_MODEL_EXTERNAL
+            self.translation_prompt = TRANSLATION_PROMPT_EXTERNAL
         else:
-            self.model_name = DEFAULT_EXTERNAL_MODEL if use_external_api else DEFAULT_MODEL
-
-        self.prompt = TRANSLATION_PROMPT_EXTERNAL if use_external_api else TRANSLATION_PROMPT_LOCAL
+            self.translation_model = DEFAULT_MODEL_LOCAL
+            self.translation_prompt = TRANSLATION_PROMPT_LOCAL
 
         # External API settings
         self.api_url = api_url
@@ -160,11 +181,11 @@ class LLMTranslator:
 
         # Track stats
         self.stats = {
-            "processed": 0,
-            "translations_performed": 0,
-            "cache_hits": 0,
-            "total_processing_time": 0,
-            "total_translation_time": 0,
+            "processed": 0.0,
+            "translations_performed": 0.0,
+            "cache_hits": 0.0,
+            "total_processing_time": 0.0,
+            "total_translation_time": 0.0,
         }
 
         # Initialize pipeline (only for local model)
@@ -198,7 +219,7 @@ class LLMTranslator:
     def _load_model(self):
         """Load the LLM model with appropriate logging controls."""
         if self.verbose:
-            print(f"Loading local LLM translation model: {self.model_name}")
+            print(f"Loading local LLM translation model: {self.translation_model}")
 
         if MODEL_REQUIRES_AUTHENTICATION:
             try:
@@ -223,7 +244,7 @@ class LLMTranslator:
                 sys.stdout = io.StringIO()
                 sys.stderr = io.StringIO()
                 try:
-                    self.pipeline = pipeline('text-generation', model=self.model_name, device_map="auto")
+                    self.pipeline = pipeline('text-generation', model=self.translation_model, device_map="auto")
                 finally:
                     # Restore stdout/stderr
                     sys.stdout, sys.stderr = old_stdout, old_stderr
@@ -232,7 +253,7 @@ class LLMTranslator:
                 transformers_logging.set_verbosity(original_tf_verbosity)
                 logging.getLogger().setLevel(original_logging_level)
         else:
-            self.pipeline = pipeline('text-generation', model=self.model_name, device_map="auto")
+            self.pipeline = pipeline('text-generation', model=self.translation_model, device_map="auto")
 
         if self.verbose:
             print(f"LLM translation model loaded successfully")
@@ -253,10 +274,10 @@ class LLMTranslator:
         }
 
         # Get model-specific configuration
-        config = get_model_specific_config(self.model_name)
+        config = _get_model_specific_config(self.translation_model)
 
         data = {
-            "model": self.model_name,
+            "model": self.translation_model,
             "messages": [
                 {"role": "system",
                  "content": "You are a specialized academic translator focusing on institutional affiliations."},
@@ -266,7 +287,7 @@ class LLMTranslator:
         }
 
         # Generate a cache key based on the prompt and model
-        cache_key = f"{self.model_name}:{prompt}"
+        cache_key = f"{self.translation_model}:{prompt}"
 
         # Implement retry logic for API calls
         for attempt in range(EXTERNAL_API_MAX_RETRIES):
@@ -337,7 +358,7 @@ class LLMTranslator:
         start_time = time.time()
 
         # Detect language
-        lang = get_language_heur(text)
+        lang = predict_lang_heuristically(text)
 
         # Skip English text if configured to do so
         if self.skip_english and lang == "en":
@@ -397,7 +418,11 @@ class LLMTranslator:
 
         return translated_text
 
-    def translate_batch(self, texts: List[str], batch_size: int = DEFAULT_BATCH_SIZE) -> List[str]:
+    def translate_batch(
+            self,
+            texts: list[str],
+            batch_size: int = DEFAULT_BATCH_SIZE
+    ) -> list[str]:
         """
         Translate a batch of texts efficiently.
         
@@ -420,7 +445,7 @@ class LLMTranslator:
 
         # Check language for all texts first
         if self.skip_english:
-            languages = [get_language_heur(text) for text in valid_texts]
+            languages = [predict_lang_heuristically(text) for text in valid_texts]
         else:
             languages = ["non-en"] * len(valid_texts)  # Placeholder if not skipping
 
@@ -502,7 +527,8 @@ class LLMTranslator:
                                     orig_idx = non_english_indices[text_idx]
                                     translated = self.translate(texts_to_translate[text_idx])
                                     batch_results[orig_idx] = translated
-                                except:
+                                except Exception as e:
+                                    print(f"Exception occured: {e}")
                                     # If individual translation fails, use original text
                                     batch_results[non_english_indices[i + j]] = texts_to_translate[i + j]
 
@@ -529,9 +555,10 @@ class LLMTranslator:
 
     def _format_prompt(self, text: str) -> str:
         """Format the prompt for LLM translation."""
-        return f'{self.prompt}\n"{text}"\n'
+        return f'{self.translation_prompt}\n"{text}"\n'
 
-    def _clean_response(self, response: str) -> str:
+    @staticmethod
+    def _clean_response(response: str) -> str:
         """Clean up the LLM response to extract only the translation."""
         # Handle repeated user/assistant patterns that might appear in the output
         if "<|user|>" in response or "<|assistant|>" in response:
@@ -543,7 +570,7 @@ class LLMTranslator:
         if "Input:" in response:
             response = response.split("Input:")[0]
 
-        # Remove any markdown formatting, etc.
+        # Remove any Markdown formatting, etc.
         response = response.replace("*", "").replace("#", "").replace("`", "")
 
         # Remove any prefix like "Output:" or "Translation:"
@@ -554,7 +581,7 @@ class LLMTranslator:
 
         return response.strip('"').strip()
 
-    def process(self, text: str) -> Dict[str, Any]:
+    def process(self, text: str) -> dict[str, Any]:
         """
         Process a single affiliation string.
         
@@ -569,10 +596,8 @@ class LLMTranslator:
                 - processed_text: The translated text
                 - translation_performed: Always True for non-empty inputs
         """
-        start_time = time.time()
-
         # Simple binary classification: English or non-English
-        heur_lang = get_language_heur(text)
+        heur_lang = predict_lang_heuristically(text)
 
         result = {
             "original_text": text,
@@ -604,8 +629,11 @@ class LLMTranslator:
 
         return result
 
-    def process_batch(self, data: Union[Dataset, List[str]], batch_size: int = DEFAULT_BATCH_SIZE) -> List[
-        Dict[str, Any]]:
+    def process_batch(
+            self,
+            data: Dataset | list[str],
+            batch_size: int = DEFAULT_BATCH_SIZE
+    ) -> list[dict[str, Any]]:
         """
         Process a batch of affiliation strings, either from a Hugging Face Dataset or a list of strings.
         
@@ -625,10 +653,9 @@ class LLMTranslator:
             raise TypeError("Input data must be either a Hugging Face Dataset or a list of strings.")
 
         # Process the batch of texts
-        start_time = time.time()
 
         # First detect languages for all texts
-        languages = [get_language_heur(text) if text and isinstance(text, str) and text.strip() else "und"
+        languages = [predict_lang_heuristically(text) if text and isinstance(text, str) and text.strip() else "un"
                      for text in texts]
 
         # Filter texts that need translation (non-empty, non-English if skip_english is True)
@@ -675,7 +702,7 @@ class LLMTranslator:
 
         return results
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get current processing statistics with derived metrics."""
         stats = self.stats.copy()
 

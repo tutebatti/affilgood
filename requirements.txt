@@ -17,3 +17,5 @@ country_converter~=1.3
 scikit-learn~=1.7.0
 Whoosh~=2.7.4
 SPARQLWrapper~=2.0.0
+fasttext
+huggingface-hub
