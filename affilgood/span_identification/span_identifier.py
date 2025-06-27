@@ -8,7 +8,8 @@ from affilgood.span_identification.span_identifier_interface import SpanIdentifi
 from affilgood.util import mk_title_case
 
 # See https://huggingface.co/nicolauduran45/affilgood-span-multilingual-v2
-DEFAULT_SPAN_MODEL = 'nicolauduran45/affilgood-span-v2'
+DEFAULT_SPAN_MODEL = "nicolauduran45/affilgood-span-multilingual-v2"
+# DEFAULT_SPAN_MODEL = 'nicolauduran45/affilgood-span-v2'  # not found
 
 DEFAULT_BATCH_SIZE = 64
 DEFAULT_THRESHOLD_SCORE = 0.75
