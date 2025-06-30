@@ -225,14 +225,14 @@ class AffilGood:
         if self.verbose and start_time:
             elapsed = time.time() - start_time
             print(f"Span identification completed in {elapsed:.2f}s")
-            print(f"Identified {sum(len(span.named_entities) for span in self.span_identifier.spans)} spans")
+            print(f"Identified {sum(len(result.spans) for result in self.span_identifier.results)} spans")
             start_time = time.time()
         
         # 3. Named Entity Recognition - process all spans in one batch
         if self.verbose:
             print(f"Recognizing entities...")
         
-        entities = self.ner.recognize_entities(self.span_identifier.spans, batch_size=batch_size)
+        entities = self.ner.recognize_entities(self.span_identifier.results, batch_size=batch_size)
         
         if self.verbose and start_time:
             elapsed = time.time() - start_time

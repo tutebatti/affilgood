@@ -4,6 +4,6 @@ TextInput = str | list[str]
 
 
 @dataclass
-class Span:
+class SplitResult:
     raw_text: str
-    named_entities: list[str]
+    spans: list[str]

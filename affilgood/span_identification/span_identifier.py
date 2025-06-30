@@ -3,12 +3,14 @@ from pathlib import Path
 import torch
 from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
 
-from affilgood.span_identification.model import Span
+from affilgood.span_identification.model import SplitResult
 from affilgood.span_identification.span_identifier_interface import SpanIdentifierInterface
 from affilgood.util import mk_title_case
 
 # See https://huggingface.co/nicolauduran45/affilgood-span-multilingual-v2
-DEFAULT_SPAN_MODEL = "nicolauduran45/affilgood-span-multilingual-v2"
+# DEFAULT_SPAN_MODEL = "nicolauduran45/affilgood-span-multilingual-v2"
+# DEFAULT_SPAN_MODEL = "SIRIS-Lab/affilgood-span"
+DEFAULT_SPAN_MODEL = "SIRIS-Lab/affilgood-span-multilingual"
 # DEFAULT_SPAN_MODEL = 'nicolauduran45/affilgood-span-v2'  # not found
 
 DEFAULT_BATCH_SIZE = 64
@@ -81,7 +83,7 @@ class SpanIdentifier(SpanIdentifierInterface):
 
             span_entities = [entity.get("word", "") for entity in cleaned_entities]
 
-            self.spans.append(Span(raw_text=raw_text, named_entities=span_entities))
+            self.results.append(SplitResult(raw_text=raw_text, spans=span_entities))
 
 
 def _fix_predicted_words(raw_text: str, named_entities: list[dict]):

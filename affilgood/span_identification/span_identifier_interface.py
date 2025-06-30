@@ -1,10 +1,10 @@
-from affilgood.span_identification.model import Span, TextInput
+from affilgood.span_identification.model import SplitResult, TextInput
 from affilgood.util import preprocess_text_input
 
 
 class SpanIdentifierInterface:
     raw_text_list: list[str]
-    spans: list[Span] = []
+    results: list[SplitResult] = []
 
     def __init__(self, **kwargs) -> None:
         pass

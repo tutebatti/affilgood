@@ -1,4 +1,4 @@
-from affilgood.span_identification.model import Span
+from affilgood.span_identification.model import SplitResult
 from affilgood.span_identification.span_identifier_interface import SpanIdentifierInterface
 
 
@@ -15,11 +15,11 @@ class SimpleSpanIdentifier(SpanIdentifierInterface):
         self.separator = separator
 
     def identify_spans(self) -> None:
-        self.spans = []
+        self.results = []
 
         for raw_text in self.raw_text_list:
             spans = _mk_spans(raw_text=raw_text, separator=self.separator)
-            self.spans.append(Span(raw_text=raw_text, named_entities=spans))
+            self.results.append(SplitResult(raw_text=raw_text, spans=spans))
 
 
 def _mk_spans(raw_text: str, separator: str = ";") -> list[str]:

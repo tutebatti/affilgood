@@ -1,4 +1,4 @@
-from affilgood.span_identification.model import Span
+from affilgood.span_identification.model import SplitResult
 from affilgood.span_identification.span_identifier_interface import SpanIdentifierInterface
 
 
@@ -13,4 +13,4 @@ class NoopSpanIdentifier(SpanIdentifierInterface):
         super().__init__(**kwargs)
 
     def identify_spans(self) -> None:
-        self.spans = [Span(raw_text=raw_text, named_entities=[raw_text]) for raw_text in self.raw_text_list]
+        self.results = [SplitResult(raw_text=raw_text, spans=[raw_text]) for raw_text in self.raw_text_list]
