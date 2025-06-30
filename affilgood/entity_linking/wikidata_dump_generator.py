@@ -16,7 +16,11 @@ from SPARQLWrapper.SPARQLExceptions import EndPointInternalError
 from tqdm import tqdm
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from entity_linking.constants import WIKIDATA_ORG_TYPES_SHORT, WIKIDATA_ORG_TYPES_EXTENDED, COUNTRY_LANGS_FILE
+from affilgood.entity_linking.constants import (
+    WIKIDATA_ORG_TYPES_SHORT,
+    WIKIDATA_ORG_TYPES_EXTENDED,
+    COUNTRY_LANGS_FILE
+)
 
 WIKIDATA_SPARQL_ENDPOINT = "https://query.wikidata.org/sparql"
 

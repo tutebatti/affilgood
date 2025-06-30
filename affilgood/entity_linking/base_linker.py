@@ -8,8 +8,14 @@ from .constants import *
 class BaseLinker(ABC):
     """Base class for entity linkers with shared functionalities."""
 
-    def __init__(self, use_cache=True, cache_dir=None, cache_expiration=604800, data_source="ror", 
-                wikidata_countries=None, wikidata_org_types=None):
+    def __init__(self,
+                 use_cache=True,
+                 cache_dir=None,
+                 cache_expiration=604800,
+                 data_source="ror",
+                 wikidata_countries=None,
+                 wikidata_org_types=None
+                 ):
         """
         Initialize the base linker.
         

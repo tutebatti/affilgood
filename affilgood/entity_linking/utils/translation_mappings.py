@@ -61,7 +61,8 @@ LOCATION_TRANSLATIONS = {
     'Lisboa': 'Lisbon',
 }
 
-def translate_institution_name(name):
+
+def translate_institution_name(name: str) -> list[str]:
     """
     Translate an institution name by applying multiple term replacements.
     First replaces institution type terms, then location/region terms in a separate pass.
@@ -74,20 +75,20 @@ def translate_institution_name(name):
     """
     if not name:
         return []
-    
+
     translations = []
     original_name = name
-    
+
     # First pass: Apply single-term replacements (like before)
     for original, translated in INSTITUTION_TYPE_TRANSLATIONS.items():
-        if original in name:
+        if original in original_name:
             translations.append(name.replace(original, translated))
-    
+
     # Second pass: Apply location translations to the original name
     for loc_original, loc_translated in LOCATION_TRANSLATIONS.items():
         if loc_original in name:
             translations.append(name.replace(loc_original, loc_translated))
-    
+
     # Third pass: Apply location translations to the institution type translations
     # to get combined translations (e.g., "University of Applied Sciences Carinthia")
     institution_translations = translations.copy()  # Copy to avoid modifying while iterating
@@ -95,10 +96,10 @@ def translate_institution_name(name):
         for loc_original, loc_translated in LOCATION_TRANSLATIONS.items():
             if loc_original in trans:
                 translations.append(trans.replace(loc_original, loc_translated))
-    
+
     # Remove duplicates and the original name
     translations = list(set(translations))
     if original_name in translations:
         translations.remove(original_name)
-    
+
     return translations

@@ -30,41 +30,42 @@ logger.setLevel(logging.INFO)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), S2AFF_PATH)))
 from s2aff.consts import PATHS
 
+
 class DataManager:
     """Manages data updates, S3 syncing, and file resolution for entity linking."""
 
     def __init__(self, verbose=False):
         self.verbose = verbose
-        
+
         # Create ROR-specific data directory using the constant
         self.ror_data_path = os.path.abspath(ROR_DATA_DIR)
         if not os.path.exists(self.ror_data_path):
             logger.info(f"Creating ROR data directory: {self.ror_data_path}")
             os.makedirs(self.ror_data_path, exist_ok=True)
-        
+
         # Keep S2AFF data path for S2AFF-specific files only
         self.data_s2aff_path = os.path.abspath(os.path.join(os.path.dirname(__file__), S2AFF_PATH, "data"))
         if not os.path.exists(self.data_s2aff_path):
             logger.info(f"Creating directory: {self.data_s2aff_path}")
             os.makedirs(self.data_s2aff_path, exist_ok=True)
-            
+
         # Initialize data source mapping functions
         # Default built-in mappers
         self._source_mappers = {
             'ror': self._map_ror_organization,
             'wikidata': self._map_wikidata_organization,
         }
-        
+
         # Add mappers from registered handlers
         for source_id, handler in DataSourceRegistry.get_all_handlers().items():
             self._source_mappers[source_id] = handler.map_organization
-        
+
         # Create base directories for indices
         self.whoosh_indices_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'whoosh_indices'))
         self.hnsw_indices_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'hnsw_indices'))
         os.makedirs(self.whoosh_indices_path, exist_ok=True)
         os.makedirs(self.hnsw_indices_path, exist_ok=True)
-        
+
         # Lang codes for country mapping
         lang_codes_df = pd.read_csv(COUNTRY_LANGS_FILE, sep='\t').fillna("")
         self.lang_lookup = lang_codes_df.set_index('country_exonym')['lang_codes'].str.split('|').to_dict()
@@ -79,7 +80,7 @@ class DataManager:
         paginator = s3.get_paginator("list_objects_v2")
         response_iterator = paginator.paginate(Bucket=bucket, Prefix=prefix)
         return [obj for page in response_iterator if "Contents" in page for obj in page["Contents"]]
-        
+
     def should_skip_s3_key(self, s3_key):
         """Determines if an S3 key should be skipped. ROR data is now handled separately."""
         if not s3_key:
@@ -130,7 +131,8 @@ class DataManager:
         for key, path in PATHS.items():
             if not os.path.exists(path):
                 logger.info(f"File '{path}' does not exist. Resolving to URL.")
-                PATHS[key] = f"https://s3-us-west-2.amazonaws.com/ai2-s2-research-public/s2aff-release/{os.path.basename(path)}"
+                PATHS[
+                    key] = f"https://s3-us-west-2.amazonaws.com/ai2-s2-research-public/s2aff-release/{os.path.basename(path)}"
 
     def ensure_s2aff_files(self):
         """Ensures all required S2AFF-specific files exist locally. ROR data is handled separately."""
@@ -145,10 +147,9 @@ class DataManager:
                 if 'ror-data' not in path:
                     logger.error(f"File {path} is missing but not resolvable to a URL.")
                     raise FileNotFoundError(f"Required S2AFF file {key} not found at {path}.")
-        
+
         # Update OpenAlex work counts (S2AFF-specific)
         self.update_openalex_works_counts()
-
 
     def format_id_url(self, org_id, source):
         """
@@ -165,7 +166,7 @@ class DataManager:
         handler = DataSourceRegistry.get_handler(source)
         if handler:
             return handler.format_id_url(org_id)
-        
+
         # Fallback to built-in sources
         if source == 'ror':
             # Handle ROR IDs - ensure they have the correct format
@@ -193,8 +194,8 @@ class DataManager:
         """
         self._source_mappers[source] = mapper_function
 
-    def get_or_create_index(self, source, indices_type, org_types=None, countries=None, 
-                           force_rebuild=False, encoder_path=None, use_wikidata_labels_with_ror=False, **kwargs):
+    def get_or_create_index(self, source, indices_type, org_types=None, countries=None,
+                            force_rebuild=False, encoder_path=None, use_wikidata_labels_with_ror=False, **kwargs):
         """
         Get or create an index for a specific data source.
         
@@ -222,11 +223,11 @@ class DataManager:
             config['encoder_path'] = encoder_path
         # Add use_wikidata_labels_with_ror to config
         config['use_wikidata_labels_with_ror'] = use_wikidata_labels_with_ror
-        
+
         # Get standard index path for built-in sources
         index_path = None
         index_id = None
-        
+
         # Try to get handler for this source
         handler = DataSourceRegistry.get_handler(source)
         if handler:
@@ -240,7 +241,7 @@ class DataManager:
             except Exception as e:
                 logger.error(f"Error getting data from handler {source}: {e}")
                 return None
-                
+
             # If we have an index ID, construct the full path
             if index_id:
                 if indices_type == 'whoosh':
@@ -250,14 +251,14 @@ class DataManager:
         else:
             # For built-in sources, use standard path calculation
             index_path = self.get_index_path(source, indices_type, org_types, countries)
-        
+
         if not index_path:
             logger.error(f"Failed to determine index path for {source}")
             return None
-        
+
         if self.verbose:
             logger.info(f"DataManager.get_or_create_index: index_path={index_path}")
-        
+
         # Check if index exists and is valid
         if not force_rebuild:
             if indices_type == 'whoosh':
@@ -268,10 +269,10 @@ class DataManager:
                 if os.path.exists(index_path) and os.path.exists(os.path.join(index_path, "org_index.bin")):
                     logger.info(f"Using existing {source} {indices_type} index: {index_path}")
                     return index_path
-        
+
         # Index doesn't exist or forced rebuild, create it
         logger.info(f"Creating {source} {indices_type} index: {index_path}")
-        
+
         # Get organization data if not already obtained from handler
         if handler and org_data is not None:
             # Data already obtained from handler
@@ -282,7 +283,7 @@ class DataManager:
             if not ror_file:
                 logger.error(f"Failed to get ROR data for index creation")
                 return None
-                
+
             # Load ROR data
             with open(ror_file, 'r', encoding='utf-8') as f:
                 org_data = json.load(f)
@@ -292,40 +293,39 @@ class DataManager:
         else:
             logger.error(f"Unknown source: {source}")
             return None
-        
+
         # Check if we have data to index
         if org_data is None or (isinstance(org_data, pd.DataFrame) and org_data.empty):
             logger.error(f"No data available for {source} index creation")
             return None
-        
+
         # Create the index
         success = False
         if indices_type == 'whoosh':
             success = self.create_whoosh_index(
-                org_data, 
-                index_path, 
-                source=source, 
+                org_data,
+                index_path,
+                source=source,
                 use_wikidata_labels_with_ror=use_wikidata_labels_with_ror
             )
         elif indices_type == 'hnsw':
             # Pass encoder_path and use_wikidata_labels_with_ror to create_hnsw_index
             success = self.create_hnsw_index(
-                org_data, 
-                index_path, 
-                source=source, 
+                org_data,
+                index_path,
+                source=source,
                 encoder_path=encoder_path if encoder_path else ENCODER_DEFAULT_MODEL,
                 use_wikidata_labels_with_ror=use_wikidata_labels_with_ror
             )
         else:
             logger.error(f"Unknown indices type: {indices_type}")
             return None
-        
+
         if not success:
             logger.error(f"Failed to create {source} {indices_type} index")
             return None
-        
-        return index_path
 
+        return index_path
 
     # ROR DATA MANAGEMENT
     def get_local_ror_dumps(self):
@@ -343,8 +343,9 @@ class DataManager:
             elif os.path.exists(os.path.join(self.ror_data_path, ror_dump_path)):
                 return os.path.join(self.ror_data_path, ror_dump_path)
             else:
-                logger.warning(f"ROR dump not found in {ror_dump_path} nor {os.path.join(self.ror_data_path, ror_dump_path)}.")
-        
+                logger.warning(
+                    f"ROR dump not found in {ror_dump_path} nor {os.path.join(self.ror_data_path, ror_dump_path)}.")
+
         logger.info(f"Fetching latest ROR dump from {ROR_DUMP_LINK}")
         try:
             response = requests.get(ROR_DUMP_LINK)
@@ -384,22 +385,22 @@ class DataManager:
             org_types = 'all'
         if countries is None:
             countries = 'all'
-            
+
         # Format org_types string
         if isinstance(org_types, list):
             org_types_str = '_'.join(org_types)
         else:
             org_types_str = org_types
-        
+
         # Format countries string
         if isinstance(countries, list):
-            countries_str = '_'.join(countries) 
+            countries_str = '_'.join(countries)
         else:
             countries_str = countries
-        
+
         # Build index name
         index_name = f"{source}_{org_types_str}_{countries_str}"
-        
+
         # Get base path depending on index type
         if indices_type == 'whoosh':
             base_path = self.whoosh_indices_path
@@ -407,10 +408,10 @@ class DataManager:
             base_path = self.hnsw_indices_path
         else:
             raise ValueError(f"Unknown indices type: {indices_type}")
-        
+
         # Return full path
         return os.path.join(base_path, index_name)
-    
+
     def get_index_metadata(self, index_path):
         """
         Get metadata for an index.
@@ -430,7 +431,7 @@ class DataManager:
                 logger.error(f"Error reading index metadata: {e}")
                 return None
         return None
-    
+
     def save_index_metadata(self, index_path, metadata):
         """
         Save metadata for an index.
@@ -448,7 +449,7 @@ class DataManager:
         except Exception as e:
             logger.error(f"Error saving index metadata: {e}")
             return False
-    
+
     def index_exists(self, source, indices_type, org_types=None, countries=None):
         """
         Check if an index exists.
@@ -472,7 +473,7 @@ class DataManager:
             meta_file = os.path.join(index_path, "org_index_meta.json")
             return os.path.exists(index_file) and os.path.exists(meta_file)
         return False
-    
+
     def list_available_indices(self, indices_type=None):
         """
         List all available indices.
@@ -484,7 +485,7 @@ class DataManager:
             Dictionary of available indices with metadata
         """
         indices = {}
-        
+
         # Determine which directories to scan
         if indices_type == 'whoosh' or indices_type is None:
             if os.path.exists(self.whoosh_indices_path):
@@ -493,7 +494,7 @@ class DataManager:
                     if os.path.isdir(index_path) and os.listdir(index_path):
                         metadata = self.get_index_metadata(index_path)
                         indices[f"whoosh/{index_name}"] = metadata or {"path": index_path}
-        
+
         if indices_type == 'hnsw' or indices_type is None:
             if os.path.exists(self.hnsw_indices_path):
                 for index_name in os.listdir(self.hnsw_indices_path):
@@ -501,7 +502,7 @@ class DataManager:
                     if os.path.isdir(index_path) and os.path.exists(os.path.join(index_path, "org_index.bin")):
                         metadata = self.get_index_metadata(index_path)
                         indices[f"hnsw/{index_name}"] = metadata or {"path": index_path}
-        
+
         return indices
 
     def should_update_openalex(self, days_threshold=UPDATE_OPENALEX_WORK_COUNTS_OLDER_THAN):
@@ -512,7 +513,7 @@ class DataManager:
             return True
         age = datetime.now() - datetime.fromtimestamp(os.path.getmtime(path))
         return age > timedelta(days=days_threshold)
-   
+
     def update_openalex_works_counts(self):
         """Updates OpenAlex work counts."""
         if self.should_update_openalex():
@@ -554,20 +555,20 @@ class DataManager:
         """
         # Create WikidataDumpGenerator to get WikiData organizations
         from .wikidata_dump_generator import WikidataDumpGenerator
-        
+
         indexer = WikidataDumpGenerator(verbose=self.verbose)
-        
+
         try:
             # Get WikiData organizations
             orgs_df = indexer.get_index(countries=countries, org_types=org_types)
-            
+
             if orgs_df is None or orgs_df.empty:
                 logger.warning("No organizations found in WikiData with the specified filters")
                 return None
-                
+
             logger.info(f"Retrieved {len(orgs_df)} organizations from WikiData")
             return orgs_df.fillna("")
-            
+
         except Exception as e:
             logger.error(f"Error retrieving WikiData organizations: {e}")
             return None
@@ -584,29 +585,29 @@ class DataManager:
             dict: Standardized organization fields
         """
         doc = {}
-        
+
         # Core fields
         doc['id'] = org.get('id', '')
         doc['name'] = org.get('name', '')
         doc['name_length'] = len(doc['name'].split()) if doc['name'] else 0
-        
+
         # Get aliases, labels
         doc['aliases'] = org.get('aliases', [])
         doc['labels'] = [label['label'] for label in org.get('labels', [])] if 'labels' in org else []
         doc['acronyms'] = org.get('acronyms', [])
-        
+
         # Location information
         if 'addresses' in org and len(org['addresses']) > 0:
             address = org['addresses'][0]
             doc['city'] = address.get('city', '')
-            
+
             # Try to get region from geonames
             if 'geonames_city' in address and 'geonames_admin1' in address['geonames_city']:
                 doc['region'] = address['geonames_city']['geonames_admin1'].get('name', '')
         else:
             doc['city'] = ''
             doc['region'] = ''
-            
+
         # Country information
         if 'country' in org:
             doc['country'] = org['country'].get('country_code', '')
@@ -614,14 +615,14 @@ class DataManager:
         else:
             doc['country'] = ''
             doc['country_name'] = ''
-        
+
         # Parent information
-        doc['parent_organizations'] = [r['label'] for r in org.get('relationships', []) 
-                                    if r.get('type') == 'Parent']
+        doc['parent_organizations'] = [r['label'] for r in org.get('relationships', [])
+                                       if r.get('type') == 'Parent']
         doc['parent'] = ' '.join(doc['parent_organizations'])
-        
+
         return doc
-            
+
     def _map_wikidata_organization(self, org):
         """
         Map a WikiData organization to standard fields.
@@ -633,12 +634,12 @@ class DataManager:
             dict: Standardized organization fields
         """
         doc = {}
-        
+
         # Core fields
         doc['id'] = org.get('id', '')
         doc['name'] = org.get('name', '')
         doc['name_length'] = len(doc['name'].split()) if doc['name'] else 0
-        
+
         # Process aliases
         if 'aliases' in org:
             if isinstance(org['aliases'], list):
@@ -654,7 +655,7 @@ class DataManager:
                 doc['aliases'] = []
         else:
             doc['aliases'] = []
-            
+
         # Process all_names (labels)
         if 'all_names' in org:
             if isinstance(org['all_names'], list):
@@ -670,7 +671,7 @@ class DataManager:
                 doc['labels'] = []
         else:
             doc['labels'] = []
-            
+
         # Process acronyms
         if 'acronyms' in org:
             if isinstance(org['acronyms'], list):
@@ -684,13 +685,13 @@ class DataManager:
                 doc['acronyms'] = []
         else:
             doc['acronyms'] = []
-            
+
         # Location information
         doc['city'] = org.get('city', '')
         doc['region'] = org.get('region', '')
         doc['country'] = org.get('country_code', '')
         doc['country_name'] = org.get('country_name', '')
-        
+
         # Parent information
         if 'relationships' in org:
             if isinstance(org['relationships'], str):
@@ -702,17 +703,18 @@ class DataManager:
         else:
             doc['parent'] = ''
             doc['parent_organizations'] = []
-        
+
         return doc
-            
-    def process_organization_for_index(self, org, source='ror', use_wikidata_labels_with_ror=False, wikidata_labels=None):
+
+    def process_organization_for_index(self, org, source='ror', use_wikidata_labels_with_ror=False,
+                                       wikidata_labels=None):
         """
         Process organization for indexing with standardized field names.
         
         Args:
-            org: Organization dictionary from specific source
-            source: Data source identifier
-            use_wikidata_labels_with_ror: Whether to enrich ROR indices with WikiData labels
+            org: Organization dictionary from specific source,
+            source: Data source identifier,
+            use_wikidata_labels_with_ror: Whether to enrich ROR indices with WikiData labels,
             wikidata_labels: Dictionary of WikiData labels (if None, will be loaded if needed)
             
         Returns:
@@ -721,64 +723,66 @@ class DataManager:
         # Check if we have a mapper for this source
         if source not in self._source_mappers:
             raise ValueError(f"Unknown source: {source}. Registered sources: {list(self._source_mappers.keys())}")
-        
+
         # Map source-specific fields to standard structure
         doc = self._source_mappers[source](org)
-        
+
         # Extract and remove extra_fields to prevent schema conflicts
         extra_fields = {}
         if 'extra_fields' in doc:
             extra_fields = doc.pop('extra_fields')
-        
+
         # Common processing for all sources after mapping
         # Add data source field
         doc['data_source'] = source
-        
+
         # Process name normalization
         original_name = doc['name']
         normalized_name = unidecode(original_name)
         if normalized_name != original_name:
             doc['name_normalized'] = normalized_name
-        
+
         # Generate translations for the institution name
         translated_names = translate_institution_name(original_name)
-        
+
         # Translate aliases if they exist
         translated_aliases = []
         for alias in doc.get('aliases', []) + doc.get('labels', []):
             translated_aliases.extend(translate_institution_name(alias))
-        
+
         # Add WikiData labels if enabled and source is ROR
         if use_wikidata_labels_with_ror and source == 'ror' and (wikidata_labels or wikidata_labels is None):
             # Load WikiData labels if not provided
             if wikidata_labels is None:
                 wikidata_labels = self.load_wikidata_labels(verbose=hasattr(self, 'verbose') and self.verbose)
-            
+
             # Get the clean ROR ID
             clean_ror_id = doc['id']
             if clean_ror_id.startswith(ROR_URL):
                 clean_ror_id = clean_ror_id.replace(ROR_URL, "")
-            
+
             # Add WikiData labels to aliases
             if clean_ror_id in wikidata_labels:
                 for wikidata_label, lang in wikidata_labels[clean_ror_id]:
-                    if wikidata_label and wikidata_label not in doc.get('aliases', []) and wikidata_label not in doc.get('labels', []):
+                    if wikidata_label and wikidata_label not in doc.get('aliases',
+                                                                        []) and wikidata_label not in doc.get('labels',
+                                                                                                              []):
                         # Add to aliases or labels list
                         if 'aliases' not in doc:
                             doc['aliases'] = []
                         doc['aliases'].append(wikidata_label)
-                        
+
                         # Also add translations of WikiData labels
                         translated_aliases.extend(translate_institution_name(wikidata_label))
-        
+
         # Use get_variants_list for aliases with translated names
         all_aliases = doc.get('aliases', []) + doc.get('labels', []) + translated_names + translated_aliases
-        
+
         # Generate all variants including normalized ones
         all_alias_variants = get_variants_list(all_aliases)
         doc['aliases_text'] = ' ||| '.join(all_alias_variants)
         doc['aliases_list'] = all_alias_variants
-        
+
         # Process acronyms
         acronyms = doc.get('acronyms', [])
         # Ensure acronyms is a list
@@ -788,10 +792,10 @@ class DataManager:
                 acronyms = acronyms.split(' ||| ') if ' ||| ' in acronyms else [acronyms]
             else:
                 acronyms = []
-        
+
         all_acronyms_variants = get_variants_list(acronyms)
         doc['acronyms'] = ' ||| '.join(all_acronyms_variants)
-        
+
         # Combined field with all names
         all_names = [original_name]
         if normalized_name != original_name:
@@ -799,7 +803,7 @@ class DataManager:
         all_names.extend(acronyms)
         all_names.extend(all_aliases)
         doc['all_text'] = ' ||| '.join(filter(None, all_names))
-        
+
         # Combined location field
         location_parts = [
             doc.get('city', ''),
@@ -807,7 +811,7 @@ class DataManager:
             doc.get('country_name', '')
         ]
         doc['location_text'] = ' '.join(filter(None, location_parts))
-        
+
         # Clean up internal fields that aren't part of the schema
         if 'aliases' in doc:
             del doc['aliases']
@@ -815,7 +819,7 @@ class DataManager:
             del doc['labels']
         if 'parent_organizations' in doc:
             del doc['parent_organizations']
-        
+
         # Store any extra_fields as JSON in a STORED field
         if extra_fields:
             try:
@@ -823,9 +827,9 @@ class DataManager:
             except:
                 # If serialization fails, store as string representation
                 doc['extra_data'] = str(extra_fields)
-        
+
         return doc
-            
+
     def get_standardized_schema(self):
         """
         Returns a standardized Whoosh schema for organization indexing, 
@@ -836,37 +840,37 @@ class DataManager:
         """
         from whoosh.fields import Schema, TEXT, ID, KEYWORD, STORED
         from whoosh.analysis import StemmingAnalyzer, StandardAnalyzer
-        
+
         return Schema(
             # Core fields - source agnostic
             id=ID(stored=True),
             name=TEXT(analyzer=StemmingAnalyzer(), stored=True),
             name_normalized=TEXT(analyzer=StemmingAnalyzer(), stored=True),
-            
+
             # Names and aliases
             aliases_text=TEXT(analyzer=StemmingAnalyzer(), stored=True),
             aliases_list=STORED,
             acronyms=KEYWORD(stored=True),
-            
+
             # Location information
             city=TEXT(analyzer=StandardAnalyzer(), stored=True),
             region=TEXT(analyzer=StandardAnalyzer(), stored=True),
             country=TEXT(analyzer=StandardAnalyzer(), stored=True),
             country_name=TEXT(analyzer=StandardAnalyzer(), stored=True),
-            
+
             # Combined fields for search
             all_text=TEXT(analyzer=StemmingAnalyzer(), stored=True),
             location_text=TEXT(analyzer=StandardAnalyzer(), stored=True),
-            
+
             # Parent organizations
             parent=TEXT(analyzer=StemmingAnalyzer(), stored=True),
-            
+
             # For boosting and filtering
             name_length=STORED,
-            
+
             # Source field - explicitly track the data source
             data_source=ID(stored=True),
-            
+
             # Store extra fields as JSON string
             extra_data=STORED
         )
@@ -877,14 +881,14 @@ class DataManager:
         if os.path.exists(WIKIDATA_LABELS_FILE):
             if verbose:
                 logger.info(f"Loading WikiData labels from {WIKIDATA_LABELS_FILE}")
-            
+
             # Determine if it's a gzipped file
             if WIKIDATA_LABELS_FILE.endswith('.gz'):
                 import gzip
                 open_func = gzip.open
             else:
                 open_func = open
-            
+
             try:
                 # Load WikiData labels (tab-separated format: ror_id, wiki_id, label, lang)
                 with open_func(WIKIDATA_LABELS_FILE, 'rt', encoding='utf-8') as f:
@@ -899,14 +903,14 @@ class DataManager:
                             if ror_id not in wikidata_labels:
                                 wikidata_labels[ror_id] = []
                             wikidata_labels[ror_id].append((label, lang))
-                
+
                 if verbose:
                     logger.info(f"Loaded WikiData labels for {len(wikidata_labels)} organizations")
             except Exception as e:
                 logger.error(f"Error loading WikiData labels: {e}")
         elif verbose:
             logger.info(f"WikiData labels file not found at {WIKIDATA_LABELS_FILE}")
-        
+
         return wikidata_labels
 
     def create_whoosh_index(self, data, index_dir, source='ror', use_wikidata_labels_with_ror=False):
@@ -923,49 +927,49 @@ class DataManager:
             bool: True if successful, False otherwise
         """
         from whoosh.index import create_in
-        
+
         if data is None or (isinstance(data, pd.DataFrame) and data.empty):
             logger.error("No organization data provided for Whoosh index creation")
             return False
-            
+
         # Create the index directory if it doesn't exist
         os.makedirs(index_dir, exist_ok=True)
-        
+
         # Get standardized schema
         schema = self.get_standardized_schema()
-        
+
         # Load WikiData labels if needed and source is ROR
         wikidata_labels = None
         if use_wikidata_labels_with_ror and source == 'ror':
             wikidata_labels = self.load_wikidata_labels(verbose=self.verbose)
-        
+
         # Create the index
         try:
             ix = create_in(index_dir, schema)
             writer = ix.writer()
-            
+
             # Process and add documents
             logger.info(f"Indexing organizations...")
-            
+
             # Handle different data types (DataFrame or list)
             if isinstance(data, pd.DataFrame):
                 for _, row in data.iterrows():
                     # Convert row to dict if it's a DataFrame
                     org_dict = row.to_dict()
                     doc = self.process_organization_for_index(
-                        org_dict, 
+                        org_dict,
                         source,
                         use_wikidata_labels_with_ror=use_wikidata_labels_with_ror,
                         wikidata_labels=wikidata_labels
                     )
-                    
+
                     # Ensure all values are of appropriate types
                     cleaned_doc = {}
                     for key, value in doc.items():
                         # Skip None values
                         if value is None:
                             continue
-                        
+
                         # Ensure ID and other text fields are strings
                         if key in ['id', 'name', 'city', 'country', 'country_name', 'region', 'parent']:
                             cleaned_doc[key] = str(value)
@@ -975,25 +979,25 @@ class DataManager:
                         # Pass other values as is
                         else:
                             cleaned_doc[key] = value
-                            
+
                     writer.add_document(**cleaned_doc)
             else:
                 # Assume list of dicts
                 for org in data:
                     doc = self.process_organization_for_index(
-                        org, 
+                        org,
                         source,
                         use_wikidata_labels_with_ror=use_wikidata_labels_with_ror,
                         wikidata_labels=wikidata_labels
                     )
-                    
+
                     # Ensure all values are of appropriate types
                     cleaned_doc = {}
                     for key, value in doc.items():
                         # Skip None values
                         if value is None:
                             continue
-                        
+
                         # Ensure ID and other text fields are strings
                         if key in ['id', 'name', 'city', 'country', 'country_name', 'region', 'parent']:
                             cleaned_doc[key] = str(value)
@@ -1003,13 +1007,13 @@ class DataManager:
                         # Pass other values as is
                         else:
                             cleaned_doc[key] = value
-                            
+
                     writer.add_document(**cleaned_doc)
-                    
+
             # Commit changes
             logger.info("Committing changes to Whoosh index...")
             writer.commit()
-            
+
             # Save metadata
             metadata = {
                 "source": source,
@@ -1019,10 +1023,10 @@ class DataManager:
                 "use_wikidata_labels_with_ror": use_wikidata_labels_with_ror
             }
             self.save_index_metadata(index_dir, metadata)
-            
+
             logger.info(f"Whoosh index created successfully in {index_dir}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error creating Whoosh index: {e}")
             import traceback
@@ -1030,7 +1034,8 @@ class DataManager:
             return False
 
     # HNSW INDEX METHODS 
-    def create_hnsw_index(self, data, index_dir, encoder_path=ENCODER_DEFAULT_MODEL, source='ror', use_wikidata_labels_with_ror=False):
+    def create_hnsw_index(self, data, index_dir, encoder_path=ENCODER_DEFAULT_MODEL, source='ror',
+                          use_wikidata_labels_with_ror=False):
         """
         Create an HNSW index from a list of organizations.
         
@@ -1049,20 +1054,21 @@ class DataManager:
         except ImportError:
             logger.error("Failed to import hnswlib. Please install with 'pip install hnswlib'")
             return False
-        
-        if data is None or (isinstance(data, pd.DataFrame) and data.empty) or (isinstance(data, list) and len(data) == 0):
+
+        if data is None or (isinstance(data, pd.DataFrame) and data.empty) or (
+                isinstance(data, list) and len(data) == 0):
             logger.error("No organization data provided for HNSW index creation")
             return False
-        
+
         # Create directory if it doesn't exist
         os.makedirs(index_dir, exist_ok=True)
-        
+
         # Initialize encoder
         try:
             from sentence_transformers import SentenceTransformer, util
             logger.info(f"Loading encoder model: {encoder_path}")
             encoder = SentenceTransformer(encoder_path)
-            
+
             # Add special tokens if needed
             if hasattr(encoder, 'tokenizer') and all(token not in encoder.tokenizer.vocab for token in SPECIAL_TOKENS):
                 logger.info("Adding special tokens to encoder tokenizer")
@@ -1071,12 +1077,12 @@ class DataManager:
         except Exception as e:
             logger.error(f"Error initializing encoder: {e}")
             return False
-        
+
         # Load WikiData labels if needed and source is ROR
         wikidata_labels = None
         if use_wikidata_labels_with_ror and source == 'ror':
             wikidata_labels = self.load_wikidata_labels(verbose=self.verbose)
-        
+
         # Load country-language mappings if available
         try:
             country_languages = {}
@@ -1094,27 +1100,27 @@ class DataManager:
         except Exception as e:
             logger.error(f"Error loading country-language mappings: {e}")
             country_languages = {}
-        
+
         try:
             # Process organizations and create text representations
             logger.info(f"Processing organizations with text representations")
-            
+
             org_data = []
             org_texts = []  # Will store all text representations for embedding
             org_text_to_data_mapping = {}  # Maps text representation to org_data index
-            
+
             # Process data (handle both DataFrame and list)
             orgs_to_process = data.to_dict('records') if isinstance(data, pd.DataFrame) else data
-            
+
             for org_idx, org in enumerate(orgs_to_process):
                 # Process the organization to standardized format with WikiData enrichment if enabled
                 std_org = self.process_organization_for_index(
-                    org, 
+                    org,
                     source,
                     use_wikidata_labels_with_ror=use_wikidata_labels_with_ror,
                     wikidata_labels=wikidata_labels
                 )
-                
+
                 # Extract info for text representation
                 org_id = std_org.get('id', '')
                 name = std_org.get('name', '')
@@ -1122,13 +1128,13 @@ class DataManager:
                 city = std_org.get('city', '')
                 country = std_org.get('country_name', '')
                 parent = std_org.get('parent', '')
-                
+
                 # Get relevant languages for this organization
                 relevant_langs = ['en']  # Always include English
                 if country and country in country_languages:
                     relevant_langs.extend(country_languages[country])
                 relevant_langs = list(set(relevant_langs))  # Remove duplicates
-                
+
                 # Create a basic organization data entry
                 org_entry = {
                     "id": org_id,
@@ -1140,7 +1146,7 @@ class DataManager:
                     "data_source": source,
                     "text_representations": []  # Will store all text formats
                 }
-                
+
                 # 1. Create canonical text representation
                 canonical_text = f"[MENTION] {name}"
                 if acronyms and len(acronyms) > 0:
@@ -1151,12 +1157,12 @@ class DataManager:
                     canonical_text += f" [CITY] {city}"
                 if country:
                     canonical_text += f" [COUNTRY] {country}"
-                    
+
                 # Add canonical representation
                 org_texts.append(canonical_text)
                 org_text_to_data_mapping[canonical_text] = org_idx
                 org_entry["text_representations"].append(canonical_text)
-                
+
                 # 2. Add variants from aliases_list if available
                 if 'aliases_list' in std_org and std_org['aliases_list']:
                     for alias in std_org['aliases_list'][:5]:  # Limit to first 5 aliases
@@ -1166,72 +1172,72 @@ class DataManager:
                                 alias_text += f" [CITY] {city}"
                             if country:
                                 alias_text += f" [COUNTRY] {country}"
-                            
+
                             org_texts.append(alias_text)
                             org_text_to_data_mapping[alias_text] = org_idx
                             org_entry["text_representations"].append(alias_text)
-                
+
                 # Add the organization entry to our data
                 org_data.append(org_entry)
-                
+
                 # Progress indication for large datasets
                 if org_idx % 5000 == 0 and org_idx > 0:
                     logger.info(f"Processed {org_idx} organizations...")
-            
+
             # Compute embeddings in batches
             logger.info("Computing embeddings for all text representations...")
             batch_size = 32
             all_embeddings = []
             embedding_to_org_mapping = []  # Maps embedding index to org_data index
-            
+
             for i in range(0, len(org_texts), batch_size):
-                batch_texts = org_texts[i:i+batch_size]
+                batch_texts = org_texts[i:i + batch_size]
                 batch_embeddings = encoder.encode(
-                    batch_texts, 
+                    batch_texts,
                     convert_to_tensor=True,
                     show_progress_bar=(i == 0)  # Only show progress for first batch
                 )
-                
+
                 # Map these embeddings to organization indices
                 for text in batch_texts:
                     embedding_to_org_mapping.append(org_text_to_data_mapping[text])
-                
+
                 # Convert to numpy
                 batch_np = batch_embeddings.cpu().numpy()
                 all_embeddings.append(batch_np)
-            
+
             # Concatenate all embeddings
             import numpy as np
             all_embeddings_np = np.vstack(all_embeddings)
-            
+
             # Normalize embeddings
             from sklearn.preprocessing import normalize
             all_embeddings_np = normalize(all_embeddings_np)
-            
+
             # Get vector dimension
             vector_dim = all_embeddings_np.shape[1]
-            
+
             # Create and build HNSW index
             logger.info(f"Building HNSW index with M={HNSW_M}, ef_construction={HNSW_EF_CONSTRUCTION}...")
             hnsw_index = hnswlib.Index(space='cosine', dim=vector_dim)
             hnsw_index.init_index(
-                max_elements=len(all_embeddings_np), 
-                ef_construction=HNSW_EF_CONSTRUCTION, 
+                max_elements=len(all_embeddings_np),
+                ef_construction=HNSW_EF_CONSTRUCTION,
                 M=HNSW_M
             )
-            
+
             # Add items to index
             hnsw_index.add_items(all_embeddings_np, np.arange(len(all_embeddings_np)))
-            
+
             # Set ef for search (higher ef leads to better accuracy but slower search)
             hnsw_index.set_ef(HNSW_EF_SEARCH)
-            
+
             # Save index and metadata
             index_file = os.path.join(index_dir, "org_index.bin")
             meta_file = os.path.join(index_dir, "org_index_meta.json")
-            
+
             hnsw_index.save_index(index_file)
-            
+
             # Save metadata, including the mapping from embedding to organization
             metadata = {
                 "data_source": source,
@@ -1247,10 +1253,10 @@ class DataManager:
                 "org_data": org_data,
                 "use_wikidata_labels_with_ror": use_wikidata_labels_with_ror
             }
-            
+
             with open(meta_file, 'w', encoding='utf-8') as f:
                 json.dump(metadata, f, indent=2)
-                
+
             # Save additional metadata in the standard format
             self.save_index_metadata(index_dir, {
                 "source": source,
@@ -1260,16 +1266,15 @@ class DataManager:
                 "encoder_path": encoder_path,
                 "use_wikidata_labels_with_ror": use_wikidata_labels_with_ror
             })
-            
+
             logger.info(f"HNSW index created successfully at {index_file}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error creating HNSW index: {e}")
             import traceback
             traceback.print_exc()
             return False
-
 
     def load_hnsw_index(self, hnsw_index_dir=None, source='ror', org_types=None, countries=None):
         """
@@ -1289,39 +1294,39 @@ class DataManager:
         except ImportError:
             logger.error("Failed to import hnswlib. Please install with 'pip install hnswlib'")
             return None, None
-        
+
         # Get the index path
         if hnsw_index_dir is None:
             hnsw_index_dir = self.get_index_path(source, 'hnsw', org_types, countries)
-        
+
         index_file = os.path.join(hnsw_index_dir, "org_index.bin")
         meta_file = os.path.join(hnsw_index_dir, "org_index_meta.json")
-        
+
         if not os.path.exists(index_file) or not os.path.exists(meta_file):
             logger.error(f"HNSW index files not found at {hnsw_index_dir}")
             return None, None
-        
+
         try:
             # Load metadata
             with open(meta_file, 'r', encoding='utf-8') as f:
                 metadata = json.load(f)
-            
+
             # Get vector dimension from metadata
             vector_dim = metadata.get("vector_dim")
             if not vector_dim:
                 logger.error("Vector dimension not found in metadata")
                 return None, None
-            
+
             # Load index
             hnsw_index = hnswlib.Index(space='cosine', dim=vector_dim)
             hnsw_index.load_index(index_file, max_elements=metadata.get("num_orgs", 0))
-            
+
             # Set search parameters
             hnsw_index.set_ef(metadata.get("hnsw_ef_search", HNSW_EF_SEARCH))
-            
+
             logger.info(f"Loaded HNSW index with {metadata.get('num_orgs', 'unknown')} organizations")
             return hnsw_index, metadata
-            
+
         except Exception as e:
             logger.error(f"Error loading HNSW index: {e}")
             return None, None

@@ -146,7 +146,7 @@ class SicrisOrganizationHandler(DataSourceHandler):
         Returns:
             dict: Standardized organization fields
         """
-        doc = {}
+        doc = dict()
 
         # Core fields - ensure ID is a string
         doc['id'] = str(org.get('SICRIS ID', ''))

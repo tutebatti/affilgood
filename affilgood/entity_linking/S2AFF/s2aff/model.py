@@ -1,4 +1,4 @@
-# File affilgood/entity_linking/S2AFF/s2aff/model.py
+# File affilgood/entity_linking/S2AFF/s2aff/llm_translator_local.py
 import os
 import torch
 
@@ -241,7 +241,7 @@ class NERPredictor:
         custom_labels = list(set(df_train.labels))
         model = NERModel(model_type, model_name, labels=custom_labels, args=model_args, use_cuda=self.use_cuda)
         model.train_model(df_train)
-        self.model = model.model
+        self.model = model.pipeline
 
         if df_validation is not None:
             result_vl, _ = self.eval(df_validation)

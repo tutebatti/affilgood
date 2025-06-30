@@ -39,17 +39,18 @@ Expected response:
 DEFAULT_MODEL = "TheBloke/neural-chat-7B-v3-2-GPTQ"
 MAX_NEW_TOKENS = 500
 
+
 class LLMReranker(BaseReranker):
     """Re-ranks entity linking predictions using an LLM model."""
-            
+
     def __init__(self, model_name=None, verbose=False):
         self.model_name = model_name if model_name else DEFAULT_MODEL
         self.verbose = verbose
-        
+
         # Store original logging levels
         original_tf_verbosity = transformers_logging.get_verbosity()
         original_logging_level = logging.getLogger().level
-        
+
         try:
             if not verbose:
                 # Disable all transformers logging
@@ -80,8 +81,9 @@ class LLMReranker(BaseReranker):
         and returns the best match using LLM scoring.
         """
         prompt = self._format_prompt(affiliation, candidates)
-        pad_token_id=self.pipeline.tokenizer.eos_token_id
-        outputs = self.pipeline(prompt, max_new_tokens=len(prompt)+MAX_NEW_TOKENS, temperature=0.1, do_sample=True, pad_token_id=pad_token_id)
+        pad_token_id = self.pipeline.tokenizer.eos_token_id
+        outputs = self.pipeline(prompt, max_new_tokens=len(prompt) + MAX_NEW_TOKENS, temperature=0.1, do_sample=True,
+                                pad_token_id=pad_token_id)
         response = outputs[0]['generated_text'].replace(prompt, '')
         return self._parse_response(response)
 
@@ -103,19 +105,18 @@ class LLMReranker(BaseReranker):
             if ror_id.lower() == "none":
                 return None
             return ror_id
-        
+
         # Try alternative formats if standard format fails
         # Look for ROR ID pattern directly (typically in format: 0xxxxx)
         ror_match = re.search(r'(?<!\w)([0-9a-z]{8,})(?!\w)', response)
         if ror_match:
             return ror_match.group(1)
-        
+
         # Look for text that might indicate a ROR ID
         if "ROR:" in response:
             ror_colon_match = re.search(r'ROR:\s*([0-9a-z]{8,})', response)
             if ror_colon_match:
                 return ror_colon_match.group(1)
-        
+
         # If no ROR ID can be found, return None
         return None
-

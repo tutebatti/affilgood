@@ -99,7 +99,7 @@ class Experiment(object, metaclass=ABCMeta):
         group_test,
         weights_test,
     ):
-        print("Loading and preprocessing dataset...")
+        print("Loading and language_prediction dataset...")
         train_dmatrix = self.convert_data(X_train, y_train, group_train, weights_train)
         val_dmatrix = self.convert_data(X_val, y_val, group_val, weights_val)
         test_dmatrix = self.convert_data(X_test, y_test, group_test, weights_test)

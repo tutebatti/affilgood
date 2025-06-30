@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 
+
 class DataSourceHandler(ABC):
     """
     Abstract base class for data source handlers.
@@ -9,7 +10,7 @@ class DataSourceHandler(ABC):
     All data source handlers must implement these methods to provide
     consistent functionality for different data sources.
     """
-    
+
     @property
     @abstractmethod
     def source_id(self):
@@ -20,7 +21,7 @@ class DataSourceHandler(ABC):
             str: Unique identifier (e.g., 'ror', 'wikidata', 'spanish_hospitals')
         """
         pass
-    
+
     @abstractmethod
     def load_data(self, config):
         """
@@ -33,7 +34,7 @@ class DataSourceHandler(ABC):
             Data object (DataFrame or list of dictionaries)
         """
         pass
-        
+
     @abstractmethod
     def get_data_for_indexing(self, config, indices_type='whoosh', **kwargs):
         """
@@ -48,7 +49,7 @@ class DataSourceHandler(ABC):
             tuple: (Data object (DataFrame or list), index_id)
         """
         pass
-        
+
     @abstractmethod
     def map_organization(self, org):
         """
@@ -61,7 +62,7 @@ class DataSourceHandler(ABC):
             dict: Standardized organization fields
         """
         pass
-        
+
     @abstractmethod
     def format_id_url(self, org_id):
         """
@@ -74,7 +75,7 @@ class DataSourceHandler(ABC):
             str: Formatted URL
         """
         pass
-       
+
     def initialize(self, config):
         """
         Initialize the handler with configuration.
@@ -96,7 +97,7 @@ class DataSourceRegistry:
     This class provides methods to register and retrieve data source handlers.
     """
     _handlers = {}
-    
+
     @classmethod
     def register(cls, handler_class):
         """
@@ -113,7 +114,7 @@ class DataSourceRegistry:
         handler = handler_class()
         cls._handlers[handler.source_id] = handler
         return handler_class
-        
+
     @classmethod
     def get_handler(cls, source_id):
         """
@@ -126,7 +127,7 @@ class DataSourceRegistry:
             DataSourceHandler: Handler for the data source, or None if not found
         """
         return cls._handlers.get(source_id)
-        
+
     @classmethod
     def get_all_handlers(cls):
         """

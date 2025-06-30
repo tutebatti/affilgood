@@ -12,11 +12,10 @@ countries.set_index('country_code', inplace=True)
 countries_dict = countries.to_dict('index')
 
 
-############################################
-### Functions
+# Functions
 
 def load_abbreviations():
-    """Loads organization name abbreviations from a TSV file."""
+    """Loads organization name abbreviations.tsv from a TSV file."""
     abbreviations_dict = {}
     if os.path.exists(ABBREVIATIONS_FILE):
         df = pd.read_csv(ABBREVIATIONS_FILE, sep='\t')
@@ -36,7 +35,6 @@ def load_abbreviations():
 
 
 def get_variants_text(text):
-    #--------------------------
     if not text:
         return []
     # Add original text
@@ -49,7 +47,6 @@ def get_variants_text(text):
 
 
 def get_variants_list(list_texts):
-    #--------------------------------
     variants = []
     for text in list_texts:
         if not text:
@@ -66,7 +63,6 @@ def get_variants_list(list_texts):
 
 
 def get_variants_country(country_code):
-    #-------------------------------------
     country_names = []
     country_code = country_code.upper()
     if country_code in countries_dict:
@@ -77,19 +73,17 @@ def get_variants_country(country_code):
 
 
 def get_languages_country(country_code):
-    #-------------------------------------
     country_languages = []
     country_code = country_code.upper()
     if country_code in countries_dict:
         country = countries_dict[country_code]
         country_languages.extend(
-            [l.strip().lower() for l in country[COUNTRY_LANG_CODES_COL].split(COUNTRY_COL_SEPARATOR)])
+            [c.strip().lower() for c in country[COUNTRY_LANG_CODES_COL].split(COUNTRY_COL_SEPARATOR)])
     return get_variants_list(country_languages)
 
 
 # TODO: Load from file, separate by language.
 def get_legal_entities():
-    #-----------------------
     list_legal_types = ['AB', 'AG', 'BV', 'CORP', 'CV', 'EIRELI', 'GMBH', 'GmbH', '&', 'CO' 'KG' 'HB', 'KB', 'KG',
                         'LDA', 'LLC', 'LLP', 'LTD', 'LIMITED', 'NV', 'OHG', 'PLC', 'PVT', 'SA', 'SARL', 'SCS', 'SL',
                         'SNC', 'SPA', 'SRL', 'VOF']
@@ -102,9 +96,8 @@ def get_legal_entities():
 
 # Some stopwords common in organization names in multiple languages.
 # TODO: Load from file.
-def get_stopwords(language='u'):
-    #------------------------------
-    stopwords = {}
+def get_stopwords(language='u') -> set:
+    stopwords = dict()
     stopwords['en'] = ['at', 'for', 'with', 'into', 'from', 'in', 'near', 'to', 'the', 'a', 'an', 'of']
     stopwords['es'] = ['a', 'de', 'en', 'por', 'con', 'sin', 'desde', 'hasta', 'sobre', 'bajo', 'el', 'la', 'los',
                        'las', 'un', 'una', 'unos', 'unas']

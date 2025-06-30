@@ -77,7 +77,7 @@ COUNTRY_ALT_NAMES_COL = 'country_alternative'
 COUNTRY_LANG_CODES_COL = 'lang_codes'
 COUNTRY_COL_SEPARATOR = '|'
 
-# File with abbreviations.
+# File with abbreviations.tsv.
 ABBREVIATIONS_FILE = f'{EL_DATA_PATH}/abbreviations.tsv'
 
 # WikiData URL (to use for prefix, etc)

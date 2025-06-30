@@ -37,7 +37,7 @@ class DenseLinker(BaseLinker):
         data_source="ror",
         org_types=None,     # WikiData org types
         countries=None,     # WikiData countries
-        use_wikidata_labels_with_ror=False # Whether to add WikiData labels from previously downloaded file when generating the ROR indices
+        use_wikidata_labels_with_ror=False  # Whether to add WikiData labels from previously downloaded file when generating the ROR indices
     ):
         # Pass data_source to BaseLinker
         super().__init__(use_cache=use_cache, data_source=data_source,
@@ -143,7 +143,7 @@ class DenseLinker(BaseLinker):
       
     def _load_organizations(self):
         """Load and encode organizations from the specified data source."""
-        # If using and index and we've already loaded the data from metadata, skip this step
+        # If using an index and if data already loaded from metadata, skip this step.
         if self.use_hnsw and hasattr(self, 'org_data') and self.org_data:
             return
 
