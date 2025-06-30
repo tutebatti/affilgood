@@ -3,8 +3,8 @@ from pathlib import Path
 import torch
 from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
 
-from affilgood.span_identification.model import SplitResult
-from affilgood.span_identification.span_identifier_interface import SpanIdentifierInterface
+from affilgood.span_identification.model import SplitResult, TextInput
+from affilgood.span_identification.span_identifier_base import RawAffiliationStringSplitter
 from affilgood.util import mk_title_case
 
 # See https://huggingface.co/nicolauduran45/affilgood-span-multilingual-v2
@@ -17,7 +17,7 @@ DEFAULT_BATCH_SIZE = 64
 DEFAULT_THRESHOLD_SCORE = 0.75
 
 
-class SpanIdentifier(SpanIdentifierInterface):
+class LLMRawAffiliationStringSplitter(RawAffiliationStringSplitter):
     def __init__(self,
                  span_model: str = None,  # identifier of Model, e.g. at Hugging Face
                  device: int | str | torch.device | None = None,
@@ -59,38 +59,43 @@ class SpanIdentifier(SpanIdentifierInterface):
             device=self.device
         )
 
-    def identify_spans(self, batch_size: int = None) -> None:
+    def identify_spans(self, raw_text_list: list[TextInput], batch_size: int = None) -> list[SplitResult]:
+
+        results = []
+
         if batch_size is None:
             batch_size = self.batch_size
 
         if self.title_case:
-            self.raw_text_list = mk_title_case(self.raw_text_list)
+            raw_text_list = mk_title_case(raw_text_list)
 
         pipeline_outputs = self.pipeline(
-            self.raw_text_list,
+            raw_text_list,
             batch_size=batch_size
         )
 
-        if len(pipeline_outputs) != len(self.raw_text_list):
+        if len(pipeline_outputs) != len(raw_text_list):
             raise RuntimeError("Mismatch between input texts and model pipeline outputs")
 
-        for raw_text, named_entities in zip(self.raw_text_list, pipeline_outputs):
+        for raw_text, split_entities in zip(raw_text_list, pipeline_outputs):
 
             if self.fix_predicted_words:
-                named_entities = _fix_predicted_words(raw_text=raw_text, named_entities=named_entities)
+                split_entities = _fix_predicted_words(raw_text=raw_text, split_entities=split_entities)
 
-            cleaned_entities = _clean_and_merge_entities(named_entities)
+            cleaned_entities = _clean_and_merge_entities(entities=split_entities)
 
             span_entities = [entity.get("word", "") for entity in cleaned_entities]
 
-            self.results.append(SplitResult(raw_text=raw_text, spans=span_entities))
+            results.append(SplitResult(raw_text=raw_text, spans=span_entities))
+
+        return results
 
 
-def _fix_predicted_words(raw_text: str, named_entities: list[dict]):
-    for entity in named_entities:
+def _fix_predicted_words(raw_text: str, split_entities: list[dict]):
+    for entity in split_entities:
         start, end = entity["start"], entity["end"]
         entity["word"] = raw_text[start:end]
-    return named_entities
+    return split_entities
 
 
 def _clean_and_merge_entities(entities: list[dict], min_score: float = DEFAULT_THRESHOLD_SCORE) -> list[dict]:

@@ -1,15 +1,18 @@
-import torch
 import time
 
+from affilgood.translation.llm_translator_external import LLMTranslatorExternal
+from affilgood.translation.llm_translator_local import LLMTranslatorLocal
+from affilgood.translation.model import TranslationConfig
+from affilgood.translation.translator_provision import mk_Translator_from_conf
 
 DEFAULT_ENTITY_LINKERS = 'Dense'
 
 
 class AffilGood:
-    def __init__(self, 
-                 span_separator='',  
-                 span_model_path=None, 
-                 ner_model_path=None, 
+    def __init__(self,
+                 span_separator='',
+                 span_model_path=None,
+                 ner_model_path=None,
                  entity_linkers=None,
                  rerank=True,
                  reranker=None,
@@ -31,8 +34,8 @@ class AffilGood:
                  # Whether to entich ROR indices with previously downloaded WikiData labels for ROR records
                  use_wikidata_labels_with_ror=False,
                  wikidata_org_types='short',  # Organization types for WikiData
-                 wikidata_countries=None,     # Countries for WikiData
-                 data_source_configs=None):   # Dictionary of configuration for additional sources
+                 wikidata_countries=None,  # Countries for WikiData
+                 data_source_configs=None):  # Dictionary of configuration for additional sources
 
         # Verbose?
         self.verbose = verbose
@@ -88,18 +91,22 @@ class AffilGood:
 
         # Auto-detect device if not specified
         if device is None:
+            import torch
             device = "cuda" if torch.cuda.is_available() else "cpu"
 
         # Initialize language preprocessor if enabled
         if language_preprocessing:
-            from affilgood.preprocessing.llm_translator import LLMTranslator
-            self.language_preprocessor = LLMTranslator(
-                model_name=llm_model_translate,
+            translation_config = TranslationConfig(
+                translation_model=llm_model_translate,
                 use_external_api=use_external_llm_translate,
-                verbose=verbose
+                verbose_logging=verbose
             )
+            if translation_config.use_external_api:
+                self.language_preprocessor = LLMTranslatorExternal(conf=translation_config)
+            else:
+                self.language_preprocessor = LLMTranslatorLocal(conf=translation_config)
             if self.verbose:
-                print(f"Initialized LLM translator {self.language_preprocessor.model_name}")
+                print(f"Initialized LLM translator {self.language_preprocessor.conf.translation_model}")
         else:
             self.language_preprocessor = None
             if self.verbose:
@@ -109,21 +116,22 @@ class AffilGood:
         if span_separator and type(span_separator) is str and len(span_separator) == 1:
             if self.verbose:
                 print(f'Initializing simple span separator by character: {span_separator}')
-            from affilgood.span_identification.simple_span_identifier import SimpleSpanIdentifier
-            self.span_identifier = SimpleSpanIdentifier(separator=span_separator)
+            from affilgood.span_identification.span_identifier_base import SimpleRawAffiliationStringSplitter
+            self.raw_affiliation_string_splitter = SimpleRawAffiliationStringSplitter(separator=span_separator)
         else:
             if span_model_path == "noop":
                 if self.verbose:
                     print(f'Span identification is disabled')
-                from affilgood.span_identification.noop_span_identifier import NoopSpanIdentifier
-                self.span_identifier = NoopSpanIdentifier()
+                from affilgood.span_identification.span_identifier_base import NoopRawAffiliationStringSplitter
+                self.raw_affiliation_string_splitter = NoopRawAffiliationStringSplitter()
             else:
-                from affilgood.span_identification.span_identifier import SpanIdentifier
+                from affilgood.span_identification.llm_span_identifier import LLMRawAffiliationStringSplitter
                 if self.verbose:
                     print(f'Initializing span identifier')
-                self.span_identifier = SpanIdentifier(span_model=span_model_path, device=device, batch_size=batch_size)
+                self.raw_affiliation_string_splitter = LLMRawAffiliationStringSplitter(span_model=span_model_path, device=device,
+                                                                                       batch_size=batch_size)
                 if self.verbose:
-                    print(f'Initialized span identifier: {self.span_identifier.span_model}')
+                    print(f'Initialized span identifier: {self.raw_affiliation_string_splitter.span_model}')
 
         # Initialize NER model
         from affilgood.ner.ner import NER
@@ -199,8 +207,8 @@ class AffilGood:
         batch_size = batch_size if batch_size is not None else self.batch_size
 
         start_time = time.time() if self.verbose else None
-        
-        # 1. Language preprocessing if enabled
+
+        # 1. Language language_prediction if enabled
         if self.language_preprocessor:
             if self.verbose:
                 print(f"Batch language preprocessing {len(texts)} texts...")
@@ -209,67 +217,66 @@ class AffilGood:
         else:
             preprocessing_results = [{}] * len(texts)  # Empty info if no preprocessor
             processed_texts = texts
-        
+
         if self.verbose and start_time:
             elapsed = time.time() - start_time
             print(f"Language preprocessing completed in {elapsed:.2f}s")
             start_time = time.time()
-        
+
         # 2. Span identification - process all texts in one batch
         if self.verbose:
             print(f"Identifying spans for {len(processed_texts)} texts...")
 
-        self.span_identifier.set_text_input(processed_texts)
-        self.span_identifier.identify_spans(batch_size=batch_size)
-        
+        split_results = self.raw_affiliation_string_splitter.identify_spans(raw_text_list=processed_texts, batch_size=batch_size)
+
         if self.verbose and start_time:
             elapsed = time.time() - start_time
             print(f"Span identification completed in {elapsed:.2f}s")
-            print(f"Identified {sum(len(result.spans) for result in self.span_identifier.results)} spans")
+            print(f"Identified {sum(len(result.spans) for result in split_results)} spans")
             start_time = time.time()
-        
+
         # 3. Named Entity Recognition - process all spans in one batch
         if self.verbose:
             print(f"Recognizing entities...")
-        
-        entities = self.ner.recognize_entities(self.span_identifier.results, batch_size=batch_size)
-        
+
+        entities = self.ner.recognize_entities(self.raw_affiliation_string_splitter.results, batch_size=batch_size)
+
         if self.verbose and start_time:
             elapsed = time.time() - start_time
             print(f"Entity recognition completed in {elapsed:.2f}s")
             start_time = time.time()
-        
+
         # 4. Entity normalization
         if self.verbose:
             print(f"Normalizing entities...")
-        
+
         normalized_data = self.normalizer.normalize(entities)
-        
+
         if self.verbose and start_time:
             elapsed = time.time() - start_time
             print(f"Entity normalization completed in {elapsed:.2f}s")
             start_time = time.time()
-        
+
         # 5. Entity linking
         if self.verbose:
             print(f"Linking entities...")
-        
+
         results = self.entity_linker.process_in_chunks(normalized_data)
-        
+
         if self.verbose and start_time:
             elapsed = time.time() - start_time
             print(f"Entity linking completed in {elapsed:.2f}s")
-        
+
         # 6. Add language detection/translation metadata
         for i, result in enumerate(results):
             if i < len(preprocessing_results):
                 result["language_info"] = preprocessing_results[i]
-        
+
         return results
 
     def get_span(self, text):
         """Identifies spans within the input text."""
-        return self.span_identifier.identify_spans(text)
+        return self.raw_affiliation_string_splitter.identify_spans(text)
 
     def get_ner(self, spans):
         """Performs named entity recognition on identified spans."""
@@ -285,25 +292,25 @@ class AffilGood:
                 # This might happen if there was caching or other shortcuts in the pipeline
                 item['linked_orgs'] = []
         return results
-        
+
     def get_normalization(self, entities):
         """Normalizes the linked entity metadata."""
         return self.normalizer.normalize(entities)
-    
+
     def get_language_stats(self):
         """Returns statistics from the language preprocessor if enabled."""
         if self.language_preprocessor:
             stats = self.language_preprocessor.get_stats()
-            
+
             # Calculate additional metrics if processing has occurred
             if stats["processed"] > 0:
                 stats["avg_processing_time"] = stats["total_processing_time"] / stats["processed"]
-                
+
                 if stats["translations_performed"] > 0:
                     stats["avg_translation_time"] = stats["total_translation_time"] / stats["translations_performed"]
                 else:
                     stats["avg_translation_time"] = None
-            
+
             return stats
         else:
             return {"error": "Language preprocessor is not enabled"}
