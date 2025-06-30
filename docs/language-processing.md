@@ -35,10 +35,10 @@ AffilGood includes language detection capabilities in the `preprocessing` module
 The `get_language_heuristics` function uses character patterns and language-specific markers:
 
 ```python
-from affilgood.preprocessing.heuristic_detector import get_language_heuristics
+from affilgood.language_prediction.heuristic_prediction import predict_lang_heuristically
 
 # Detect language
-language = get_language_heuristics("Universidad de Barcelona, Barcelona, España")
+language = predict_lang_heuristically("Universidad de Barcelona, Barcelona, España")
 print(language)  # 'es' (Spanish)
 ```
 
@@ -52,10 +52,11 @@ This approach works well for:
 For more robust detection, you can combine heuristic and model-based approaches:
 
 ```python
-from affilgood.preprocessing.language_detector import get_language_combined_heur_langdetect
+
+from affilgood.language_prediction.combined_prediction import predict_lang_with_langdetect_and_heuristic
 
 # Combined approach using heuristics + langdetect
-language = get_language_combined_heur_langdetect("Universidad de Barcelona, Barcelona, España")
+language = predict_lang_with_langdetect_and_heuristic("Universidad de Barcelona, Barcelona, España")
 print(language)  # 'es' (Spanish)
 ```
 
@@ -243,10 +244,10 @@ if translator.use_external_api:
 Language detection is available but not used in the main pipeline:
 
 ```python
-from affilgood.preprocessing.language_detector import load_model
+from affilgood.language_prediction.llm_prediction import _load_llm
 
 # Configure language detection model (optional)
-model, tokenizer = load_model(model_type='langdetect')  # or 'e5', 'fasttext'
+model, tokenizer = _load_llm(model_type='langdetect')  # or 'e5', 'fasttext'
 ```
 
 ## Use Cases

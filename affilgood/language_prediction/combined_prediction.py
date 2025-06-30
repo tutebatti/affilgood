@@ -1,5 +1,5 @@
 from affilgood.language_prediction.heuristic_prediction import predict_lang_heuristically
-from affilgood.language_prediction.llm_prediction import LLMType, determine_lang_with_llm, get_probs_with_langdetect
+from affilgood.language_prediction.llm_prediction import LLMType, predict_lang_with_llm, get_probs_with_langdetect
 from affilgood.language_prediction.model import LangCode
 
 
@@ -72,7 +72,7 @@ def predict_lang_with_e5_and_heuristic(text: str, llm_type="e5", default_lang: L
     if lang_heur == default_lang:
         try:
             # Use language model detection as fallback
-            lang_code = determine_lang_with_llm(text, LLMType[llm_type])
+            lang_code = predict_lang_with_llm(text, LLMType[llm_type])
             return lang_code
         except Exception as e:
             print(f"Model detection failed: {e}")
